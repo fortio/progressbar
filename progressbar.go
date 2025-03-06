@@ -25,7 +25,9 @@ type Config struct {
 	UseColors bool
 }
 
-// Show a progress bar percentage (0-100%).
+// Show a progress bar percentage (0-100%). On the same line as current line,
+// so when call repeatedly it will overwrite/update itself.
+// Use MoveCursorUp to move up to update other lines as needed.
 func (cfg *Config) ProgressBar(progressPercent float64) {
 	width := float64(cfg.Width)
 	if width == 0 {
@@ -48,6 +50,7 @@ func (cfg *Config) ProgressBar(progressPercent float64) {
 	fmt.Printf("\r%s %.1f%%", bar, progressPercent)
 }
 
+// Move the cursor up n lines and clears that line.
 func MoveCursorUp(n int) {
 	// ANSI escape codes used:
 	// xA = move up x lines
