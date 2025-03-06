@@ -1,7 +1,6 @@
 # progressbar
 [![Go Report Card](https://goreportcard.com/badge/fortio.org/progressbar)](https://goreportcard.com/report/fortio.org/progressbar)
 [![GoDoc](https://godoc.org/fortio.org/progressbar?status.svg)](https://pkg.go.dev/fortio.org/progressbar)
-[![codecov](https://codecov.io/gh/fortio/progressbar/branch/main/graph/badge.svg)](https://codecov.io/gh/fortio/progressbar)
 [![Maintainability](https://api.codeclimate.com/v1/badges/bf83c496d49b169cd744/maintainability)](https://codeclimate.com/github/fortio/progressbar/maintainability)
 [![CI Checks](https://github.com/fortio/progressbar/actions/workflows/include.yml/badge.svg)](https://github.com/fortio/progressbar/actions/workflows/include.yml)
 
