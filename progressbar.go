@@ -11,7 +11,7 @@ const (
 	DefaultWidth = 40
 	Space        = " "
 	Full         = "█"
-	// Green FG, Grey BG
+	// Green FG, Grey BG.
 	Color = "\033[32;47m"
 	Reset = "\033[0m"
 )
