@@ -12,7 +12,7 @@ Zero dependency cross platform (just needs basic ANSI codes and Unicode font sup
 ```go
 	pb := progressbar.Config{Width: 60, UseColors: true}
 	fmt.Print("Progress bar example\n\n") // 1 empty line before the progress bar, for the demo
-    n := 1000
+	n := 1000
 	for i := 0; i <= n; i++ {
 		pb.ProgressBar(100. * float64(i) / float64(n))
 		if i%63 == 0 {
