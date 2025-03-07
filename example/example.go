@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"fortio.org/progressbar"
@@ -25,7 +26,7 @@ func main() {
 	everyFlag := flag.Duration("every", 1*time.Second, "Print extra stuff every")
 	flag.Parse()
 	pb := progressbar.Config{Width: progressbar.DefaultWidth, UseColors: *colorFlag}
-	w := progressbar.Writer()
+	w := progressbar.Writer(os.Stdout)
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
 	go PrintStuff(w, *everyFlag)
