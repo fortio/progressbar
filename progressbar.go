@@ -5,6 +5,7 @@ package progressbar
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 )
@@ -68,21 +69,26 @@ func MoveCursorUp(n int) {
 
 type writer struct {
 	sync.Mutex
+	out io.Writer
 }
 
-func (w *writer) Write(p []byte) (n int, err error) {
+func (w *writer) Write(buf []byte) (n int, err error) {
 	w.Lock()
 	defer w.Unlock()
-	fmt.Print("\r\033[K") // erase current line
-	n, err = fmt.Print(string(p))
+	_, _ = w.out.Write([]byte("\r\033[K")) // erase current line
+	n, err = w.out.Write(buf)
 	return
 }
 
-var w = writer{}
+var w = writer{out: os.Stdout}
 
 // Writer returns an io.Writer which is safe to use concurrently with a progress bar.
 // Any writes will clear the current line/progress bar and write the new content, and
-// then rewrite the progress bar.
-func Writer() io.Writer {
+// then rewrite the progress bar. Pass in os.Stdout or os.Stderr or any other io.Writer
+// (that ends up outputting to ANSI aware terminal) to use this with your existing code.
+func Writer(out io.Writer) io.Writer {
+	w.Lock()
+	w.out = out
+	w.Unlock()
 	return &w
 }
