@@ -43,7 +43,7 @@ Manually handling a 2 lines output updates (1 misc line and the 1 line for the p
 	}
 ```
 
-```
+```sh
 go run fortio.org/progressbar/example@latest -color
 ```
 
@@ -64,7 +64,10 @@ Or without color:
 	reader.Close()
 ```
 
+See it in action with a progress bar while downloading a URL:
+```sh
 go run fortio.org/progressbar/auto_example@latest https://go.dev/ > go_dev.html
+```
 
 Will show a progress bar for instance
 ```
