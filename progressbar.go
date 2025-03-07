@@ -15,17 +15,25 @@ const (
 	Space        = " "
 	Full         = "█"
 	// Green FG, Grey BG.
-	Color = "\033[32;47m"
-	Reset = "\033[0m"
+	Color       = "\033[32;47m"
+	Reset       = "\033[0m"
+	DoneSpinner = "✓ "
 )
 
-// 1/8th of a full block to 7/8ths of a full block (ie fractional part of a block to
-// get 8x resolution per character).
-var FractionalBlocks = [...]string{"", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
+var (
+	// 1/8th of a full block to 7/8ths of a full block (ie fractional part of a block to
+	// get 8x resolution per character).
+	FractionalBlocks = [...]string{"", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
+	SpinnerChars     = [...]string{"⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ "}
+)
 
 type Config struct {
-	Width     int
+	// Width of the progress bar in characters (0 will use DefaultWidth).
+	Width int
+	// UseColors to use colors in the progress bar.
 	UseColors bool
+	// Spinner to also show a spinner in front of the progress bar.
+	Spinner bool
 }
 
 // Show a progress bar percentage (0-100%). On the same line as current line,
@@ -53,8 +61,24 @@ func (cfg *Config) ProgressBar(progressPercent float64) {
 		reset = "▻" // "◣"
 	}
 	bar := color + strings.Repeat(Full, fullCount) + FractionalBlocks[remainder] + strings.Repeat(Space, spaceCount) + reset
+	spinner := ""
 	w.Lock()
-	fmt.Printf("\r%s %.1f%%", bar, progressPercent)
+	if cfg.Spinner {
+		spinner = SpinnerChars[w.count]
+		w.count = (w.count + 1) % len(SpinnerChars)
+		if progressPercent > 99.99 {
+			spinner = DoneSpinner
+		}
+	}
+	fmt.Fprintf(w.out, "\r%s%s %.1f%%", spinner, bar, progressPercent)
+	w.Unlock()
+}
+
+// Standalone spinner when the total or progress toward 100% isn't known.
+func Spinner() {
+	w.Lock()
+	fmt.Fprintf(w.out, "\r%s", SpinnerChars[w.count])
+	w.count = (w.count + 1) % len(SpinnerChars)
 	w.Unlock()
 }
 
@@ -64,12 +88,13 @@ func MoveCursorUp(n int) {
 	// nA   = move up n lines
 	// \r   = beginning of the line
 	// (0)K = erase from current position to end of line
-	fmt.Printf("\033[%dA\r\033[K", n)
+	fmt.Fprintf(w.out, "\033[%dA\r\033[K", n)
 }
 
 type writer struct {
 	sync.Mutex
-	out io.Writer
+	out   io.Writer
+	count int
 }
 
 func (w *writer) Write(buf []byte) (n int, err error) {
