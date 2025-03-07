@@ -26,7 +26,7 @@ func main() {
 	everyFlag := flag.Duration("every", 1*time.Second, "Print extra stuff every")
 	flag.Parse()
 	pb := progressbar.Config{Width: progressbar.DefaultWidth, UseColors: *colorFlag, Spinner: true}
-	w := progressbar.Writer(os.Stdout)
+	w := progressbar.ScreenWriter(os.Stdout)
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
 	go PrintStuff(w, *everyFlag)

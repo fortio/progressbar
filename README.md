@@ -8,7 +8,9 @@
 Zero dependency cross platform (just needs basic ANSI codes and Unicode font support) golang concurrent safe progress bar for terminal/CLIs, with 8x the resolution of others (8 steps per character).
 
 
-## Example
+## Examples
+
+### Manually updating a progress bar and additional output
 
 Manually handling a 2 lines output updates (1 misc line and the 1 line for the progress bar)
 ```go
@@ -24,10 +26,12 @@ Manually handling a 2 lines output updates (1 misc line and the 1 line for the p
 		time.Sleep(20 * time.Millisecond)
 	}
 ```
-Or using the concurrent safe writer:
+
+### Concurrent safe screen writer example
+
 ```go
 	pb := progressbar.Config{Width: 60, UseColors: true}
-	w := progressbar.Writer(os.Stdout)
+	w := progressbar.ScreenWriter(os.Stdout)
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
 	go PrintStuff(w, *everyFlag)
@@ -50,6 +54,23 @@ Produces
 Or without color:
 ```
 ◅███████████████████████████▊            ▻ 69.4%
+```
+
+### Automatic Reader or Writer progress bar
+
+```go
+	reader := progressbar.NewAutoReader(resp.Body, resp.ContentLength)
+	_, err = io.Copy(os.Stdout, reader)
+	reader.Close()
+```
+
+go run fortio.org/progressbar/auto_example@latest https://go.dev/ > go_dev.html
+
+Will show a progress bar for instance
+```
+$  go run ./auto_example https://go.dev/dl/go1.24.1.src.tar.gz > /dev/null
+Fetching https://go.dev/dl/go1.24.1.src.tar.gz
+⣾ █████████████████████▌                   53.7% 15.766 Mb out of 29.352 Mb, 293ms elapsed, 53.790 Mb/s, 253ms remaining
 ```
 
 ## See also
