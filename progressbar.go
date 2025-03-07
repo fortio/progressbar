@@ -83,8 +83,15 @@ func (cfg *Config) ProgressBar(progressPercent float64) {
 	if cfg.Extra != nil {
 		extra = cfg.Extra(progressPercent)
 	}
-	// Add \n to debug/see all the incremental updates.
-	fmt.Fprint(screenWriter.out, "\r"+spinner+bar+progressPercentStr+extra+"\n")
+	screenWriter.buf = append(screenWriter.buf, "\r"...)
+	screenWriter.buf = append(screenWriter.buf, spinner...)
+	screenWriter.buf = append(screenWriter.buf, bar...)
+	screenWriter.buf = append(screenWriter.buf, progressPercentStr...)
+	screenWriter.buf = append(screenWriter.buf, extra...)
+	// screenWriter.buf = append(screenWriter.buf, '\n') // Uncomment to debug/see all the incremental updates.
+	_, _ = screenWriter.out.Write(screenWriter.buf)
+	screenWriter.buf = screenWriter.buf[:0]
+	screenWriter.needErase = true
 	screenWriter.Unlock()
 }
 
@@ -112,19 +119,27 @@ func MoveCursorUp(n int) {
 
 type writer struct {
 	sync.Mutex
-	out   io.Writer
-	count int
+	out       io.Writer
+	buf       []byte
+	count     int
+	needErase bool
 }
 
 func (w *writer) Write(buf []byte) (n int, err error) {
 	w.Lock()
-	defer w.Unlock()
-	_, _ = w.out.Write([]byte("\r\033[K")) // erase current line
+	if w.needErase {
+		_, _ = w.out.Write([]byte("\r\033[K")) // erase current progress bar line
+		w.needErase = false
+	}
 	n, err = w.out.Write(buf)
+	w.Unlock()
 	return
 }
 
-var screenWriter = writer{out: os.Stdout}
+// Global write with lock and reused buffer.
+// Outside of testing there is generally only 1 valid output for ansi progress bar:
+// os.Stdout or os.Stderr.
+var screenWriter = writer{out: os.Stderr, buf: make([]byte, 0, 256)}
 
 // ScreenWriter returns an io.ScreenWriter which is safe to use concurrently with a progress bar.
 // Any writes will clear the current line/progress bar and write the new content, and

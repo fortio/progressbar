@@ -36,5 +36,5 @@ func main() {
 		pb.ProgressBar(100. * float64(i) / float64(n))
 		time.Sleep(*delayFlag)
 	}
-	fmt.Println()
+	fmt.Println() // When done, print a newline as the progress bar by default stays on same line.
 }
