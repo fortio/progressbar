@@ -22,10 +22,10 @@ func PrintStuff(w io.Writer, every time.Duration) {
 
 func main() {
 	colorFlag := flag.Bool("color", false, "Use color in the progress bar")
-	delayFlag := flag.Duration("delay", 20*time.Millisecond, "Delay between progress bar updates")
+	delayFlag := flag.Duration("delay", 50*time.Millisecond, "Delay between progress bar updates")
 	everyFlag := flag.Duration("every", 1*time.Second, "Print extra stuff every")
 	flag.Parse()
-	pb := progressbar.Config{Width: progressbar.DefaultWidth, UseColors: *colorFlag}
+	pb := progressbar.Config{Width: progressbar.DefaultWidth, UseColors: *colorFlag, Spinner: true}
 	w := progressbar.Writer(os.Stdout)
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
