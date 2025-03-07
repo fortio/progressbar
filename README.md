@@ -1,8 +1,8 @@
 # progressbar
 [![Go Report Card](https://goreportcard.com/badge/fortio.org/progressbar)](https://goreportcard.com/report/fortio.org/progressbar)
 [![GoDoc](https://godoc.org/fortio.org/progressbar?status.svg)](https://pkg.go.dev/fortio.org/progressbar)
-[![Maintainability](https://api.codeclimate.com/v1/badges/bf83c496d49b169cd744/maintainability)](https://codeclimate.com/github/fortio/progressbar/maintainability)
 [![CI Checks](https://github.com/fortio/progressbar/actions/workflows/include.yml/badge.svg)](https://github.com/fortio/progressbar/actions/workflows/include.yml)
+[![GitHub Release](https://img.shields.io/github/release/fortio/progressbar.svg?style=flat)](https://github.com/fortio/progressbar/releases/)
 
 
 Zero dependency cross platform (just needs basic ANSI codes and Unicode font support) golang concurrent safe progress bar for terminal/CLIs, with 8x the resolution of others (8 steps per character).
