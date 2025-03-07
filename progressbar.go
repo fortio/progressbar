@@ -4,7 +4,9 @@ package progressbar
 
 import (
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 )
 
 const (
@@ -27,7 +29,10 @@ type Config struct {
 
 // Show a progress bar percentage (0-100%). On the same line as current line,
 // so when call repeatedly it will overwrite/update itself.
-// Use MoveCursorUp to move up to update other lines as needed.
+// Use MoveCursorUp to move up to update other lines as needed or use Writer()
+// to write output without mixing with a progress bar.
+// This is thread safe / acquires a shared lock to avoid issues on the output.
+// Of note it will work best if every output to the Writer() ends with a \n.
 func (cfg *Config) ProgressBar(progressPercent float64) {
 	width := float64(cfg.Width)
 	if width == 0 {
@@ -47,14 +52,37 @@ func (cfg *Config) ProgressBar(progressPercent float64) {
 		reset = "▻" // "◣"
 	}
 	bar := color + strings.Repeat(Full, fullCount) + FractionalBlocks[remainder] + strings.Repeat(Space, spaceCount) + reset
+	w.Lock()
 	fmt.Printf("\r%s %.1f%%", bar, progressPercent)
+	w.Unlock()
 }
 
 // Move the cursor up n lines and clears that line.
 func MoveCursorUp(n int) {
 	// ANSI escape codes used:
-	// xA = move up x lines
-	// 2K = clear entire line
-	// G = move to the beginning of the line
-	fmt.Printf("\033[%dA\033[2K\033[G", n)
+	// nA   = move up n lines
+	// \r   = beginning of the line
+	// (0)K = erase from current position to end of line
+	fmt.Printf("\033[%dA\r\033[K", n)
+}
+
+type writer struct {
+	sync.Mutex
+}
+
+func (w *writer) Write(p []byte) (n int, err error) {
+	w.Lock()
+	defer w.Unlock()
+	fmt.Print("\r\033[K") // erase current line
+	n, err = fmt.Print(string(p))
+	return
+}
+
+var w = writer{}
+
+// Writer returns an io.Writer which is safe to use concurrently with a progress bar.
+// Any writes will clear the current line/progress bar and write the new content, and
+// then rewrite the progress bar.
+func Writer() io.Writer {
+	return &w
 }
