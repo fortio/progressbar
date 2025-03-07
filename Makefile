@@ -1,5 +1,6 @@
 demo:
 	go run ./example -color
+	go run ./auto_example https://go.dev/dl/go1.24.1.src.tar.gz > /dev/null
 
 lint: .golangci.yml
 	golangci-lint run
