@@ -70,14 +70,14 @@ func (cfg *Config) ProgressBar(progressPercent float64) {
 			spinner = DoneSpinner
 		}
 	}
-	fmt.Printf("\r%s%s %.1f%%", spinner, bar, progressPercent)
+	fmt.Fprintf(w.out, "\r%s%s %.1f%%", spinner, bar, progressPercent)
 	w.Unlock()
 }
 
 // Standalone spinner when the total or progress toward 100% isn't known.
 func Spinner() {
 	w.Lock()
-	fmt.Printf("\r%s", SpinnerChars[w.count])
+	fmt.Fprintf(w.out, "\r%s", SpinnerChars[w.count])
 	w.count = (w.count + 1) % len(SpinnerChars)
 	w.Unlock()
 }
@@ -88,7 +88,7 @@ func MoveCursorUp(n int) {
 	// nA   = move up n lines
 	// \r   = beginning of the line
 	// (0)K = erase from current position to end of line
-	fmt.Printf("\033[%dA\r\033[K", n)
+	fmt.Fprintf(w.out, "\033[%dA\r\033[K", n)
 }
 
 type writer struct {
