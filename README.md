@@ -76,6 +76,9 @@ Fetching https://go.dev/dl/go1.24.1.src.tar.gz
 ⣾ █████████████████████▌                   53.7% 15.766 Mb out of 29.352 Mb, 293ms elapsed, 53.790 Mb/s, 253ms remaining
 ```
 
+### Multicurl
+You can see it in use in [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli too.
+
 ## See also
 
 If you have more advanced needs for TUI including raw mode input or readline, you can also see/use/have a look at
