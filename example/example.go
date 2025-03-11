@@ -10,13 +10,14 @@ import (
 	"fortio.org/progressbar"
 )
 
-func PrintStuff(w io.Writer, every time.Duration) {
+func PrintStuff(pb *progressbar.Config, w io.Writer, every time.Duration) {
 	ticker := time.NewTicker(every)
 	i := 0
 	for range ticker.C {
 		i++
-		nowStr := time.Now().Format("15:04:05")
-		fmt.Fprintf(w, "[%d] Just an extra demo print every %v (%s)\n", i, every, nowStr)
+		nowStr := time.Now().Format("15:04:05 ")
+		fmt.Fprintf(w, "[%d] Just an extra demo print every %v: %s\n", i, every, nowStr)
+		pb.UpdatePrefix(nowStr)
 	}
 }
 
@@ -29,7 +30,7 @@ func main() {
 	w := progressbar.ScreenWriter(os.Stdout)
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
-	go PrintStuff(w, *everyFlag)
+	go PrintStuff(&pb, w, *everyFlag)
 	// exact number of 'pixels', just to demo every smooth step:
 	n := pb.Width * 8
 	for i := 0; i <= n; i++ {

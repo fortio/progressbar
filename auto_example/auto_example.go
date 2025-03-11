@@ -41,12 +41,13 @@ func Main() int {
 		fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", url, err)
 		return 1
 	}
+	progressbar.ScreenWriter(os.Stderr)
+	reader := progressbar.NewAutoReader(resp.Body, resp.ContentLength)
+	reader.Prefix = "URL "
 	if resp.StatusCode != http.StatusOK {
 		fmt.Fprintf(os.Stderr, "Error fetching %s: %s\n", url, resp.Status)
 		return 1
 	}
-	progressbar.ScreenWriter(os.Stderr)
-	reader := progressbar.NewAutoReader(resp.Body, resp.ContentLength)
 	_, err = io.Copy(os.Stdout, reader)
 	reader.Close()
 	if err != nil {

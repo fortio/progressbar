@@ -26,7 +26,7 @@ var (
 	// 1/8th of a full block to 7/8ths of a full block (ie fractional part of a block to
 	// get 8x resolution per character).
 	FractionalBlocks = [...]string{"", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
-	SpinnerChars     = [...]string{"⣾ ", "⣽ ", "⣻ ", "⢿ ", "⡿ ", "⣟ ", "⣯ ", "⣷ "}
+	SpinnerChars     = [...]string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "}
 )
 
 type Config struct {
@@ -37,7 +37,16 @@ type Config struct {
 	// Spinner to also show a spinner in front of the progress bar.
 	Spinner bool
 	// Extra string to show after the progress bar. Keep nil for no extra.
-	Extra func(progressPercent float64) string
+	Extra  func(progressPercent float64) string
+	Prefix string
+}
+
+// UpdatePrefix changes the prefix while the progress bar is running.
+// This is thread safe / acquires a shared lock to avoid issues on the output.
+func (cfg *Config) UpdatePrefix(p string) {
+	screenWriter.Lock()
+	cfg.Prefix = p
+	screenWriter.Unlock()
 }
 
 // Show a progress bar percentage (0-100%). On the same line as current line,
@@ -83,7 +92,8 @@ func (cfg *Config) ProgressBar(progressPercent float64) {
 	if cfg.Extra != nil {
 		extra = cfg.Extra(progressPercent)
 	}
-	screenWriter.buf = append(screenWriter.buf, "\r"...)
+	screenWriter.buf = append(screenWriter.buf, '\r')
+	screenWriter.buf = append(screenWriter.buf, cfg.Prefix...)
 	screenWriter.buf = append(screenWriter.buf, spinner...)
 	screenWriter.buf = append(screenWriter.buf, bar...)
 	screenWriter.buf = append(screenWriter.buf, progressPercentStr...)
@@ -210,12 +220,12 @@ func (a *AutoProgress) Extra(progressPercent float64) string {
 	switch {
 	case a.total <= 0:
 		// No total, show current, elapsed and speed.
-		return fmt.Sprintf(" %s, %v elapsed, %s/s",
+		return fmt.Sprintf(" %s, %v elapsed, %s/s  ",
 			HumanBytes(a.current), elapsed.Round(time.Millisecond), HumanBytes(speed))
 	case !IsDone(progressPercent):
 		bytesLeft := a.total - a.current
 		timeLeft := time.Duration(float64(time.Second) * float64(bytesLeft) / speed)
-		return fmt.Sprintf(" %s out of %s, %s elapsed, %s/s, %s remaining",
+		return fmt.Sprintf(" %s out of %s, %s elapsed, %s/s, %s remaining  ",
 			HumanBytes(a.current), HumanBytes(a.total),
 			HumanDuration(elapsed), HumanBytes(speed),
 			HumanDuration(timeLeft))
@@ -294,5 +304,13 @@ func NewAutoWriter(w io.Writer, total int64) *AutoProgressWriter {
 
 // DefaultConfig returns a default Config with DefaultWidth, colors, spinner and no extra string.
 func DefaultConfig() Config {
-	return Config{DefaultWidth, true, true, nil}
+	return Config{DefaultWidth, true, true, nil, ""}
 }
+
+// Compile check time of interface implementations.
+var (
+	_ io.Writer = &AutoProgressWriter{}
+	_ io.Closer = &AutoProgressWriter{}
+	_ io.Reader = &AutoProgressReader{}
+	_ io.Closer = &AutoProgressReader{}
+)
