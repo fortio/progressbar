@@ -5,8 +5,13 @@
 [![GitHub Release](https://img.shields.io/github/release/fortio/progressbar.svg?style=flat)](https://github.com/fortio/progressbar/releases/)
 
 
-Zero dependency cross platform (just needs basic ANSI codes and Unicode font support) golang concurrent safe progress bar for terminal/CLIs, with 8x the resolution of others (8 steps per character).
+Zero dependency cross platform (just needs basic ANSI codes and Unicode font support,
+and ANSI codes can be disabled too if needed) golang concurrent safe progress bar for terminal/CLIs, with 8x the resolution of others (8 steps per character).
 
+Shows a spinner and/or a progress bar with optional prefix and extra info.
+
+Also provides reader/writer wrappers to automatically show progress of downloads/uploads
+or other io operations. As well as a Writer that can be used concurrently with the progress bar to show other output on screen.
 
 ## Examples
 
