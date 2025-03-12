@@ -1,6 +1,6 @@
 # progressbar
-[![Go Report Card](https://goreportcard.com/badge/fortio.org/progressbar)](https://goreportcard.com/report/fortio.org/progressbar)
 [![GoDoc](https://godoc.org/fortio.org/progressbar?status.svg)](https://pkg.go.dev/fortio.org/progressbar)
+[![Go Report Card](https://goreportcard.com/badge/fortio.org/progressbar)](https://goreportcard.com/report/fortio.org/progressbar)
 [![CI Checks](https://github.com/fortio/progressbar/actions/workflows/include.yml/badge.svg)](https://github.com/fortio/progressbar/actions/workflows/include.yml)
 [![GitHub Release](https://img.shields.io/github/release/fortio/progressbar.svg?style=flat)](https://github.com/fortio/progressbar/releases/)
 
