@@ -41,9 +41,9 @@ func Main() int {
 		fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", url, err)
 		return 1
 	}
-	progressbar.ScreenWriter(os.Stderr)
-	reader := progressbar.NewAutoReader(resp.Body, resp.ContentLength)
-	reader.Prefix = "URL "
+	bar := progressbar.NewBarWithWriter(os.Stderr)
+	bar.Prefix = "URL "
+	reader := progressbar.NewAutoReader(bar, resp.Body, resp.ContentLength)
 	if resp.StatusCode != http.StatusOK {
 		fmt.Fprintf(os.Stderr, "Error fetching %s: %s\n", url, resp.Status)
 		return 1
