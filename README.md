@@ -32,6 +32,8 @@ Manually handling a 2 lines output updates (1 misc line and the 1 line for the p
 	}
 ```
 
+Source: [example/example.go](example/example.go) (`-moveup` mode)
+
 ### Concurrent safe screen writer example
 
 ```go
@@ -61,6 +63,8 @@ Or without color:
 ◅███████████████████████████▊            ▻ 69.4%
 ```
 
+Source: [example/example.go](example/example.go) (default mode)
+
 ### Automatic Reader or Writer progress bar
 
 ```go
@@ -80,6 +84,8 @@ $  go run ./auto_example https://go.dev/dl/go1.24.1.src.tar.gz > /dev/null
 Fetching https://go.dev/dl/go1.24.1.src.tar.gz
 ⣾ █████████████████████▌                   53.7% 15.766 Mb out of 29.352 Mb, 293ms elapsed, 53.790 Mb/s, 253ms remaining
 ```
+
+Source: [auto_example/auto_example.go](auto_example/auto_example.go)
 
 ### Multicurl
 You can see it in use in [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli too.
