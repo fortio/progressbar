@@ -1,6 +1,14 @@
-demo:
+DEMO_URL ?= https://go.dev/dl/go1.24.1.src.tar.gz
+
+.PHONY: demo demo_auto demo_simple
+
+demo: demo_simple demo_auto
+
+demo_simple:
 	go run ./example -color
-	go run ./auto_example https://go.dev/dl/go1.24.1.src.tar.gz > /dev/null
+
+demo_auto:
+	go run ./auto_example $(DEMO_URL) | wc -c
 
 lint: .golangci.yml
 	golangci-lint run

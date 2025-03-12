@@ -14,7 +14,7 @@ Zero dependency cross platform (just needs basic ANSI codes and Unicode font sup
 
 Manually handling a 2 lines output updates (1 misc line and the 1 line for the progress bar)
 ```go
-	pb := progressbar.Config{Width: 60, UseColors: true}
+	pb := progressbar.NewBar()
 	fmt.Print("Progress bar example\n\n") // 1 empty line before the progress bar, for the demo
 	n := 1000
 	for i := 0; i <= n; i++ {
@@ -30,8 +30,8 @@ Manually handling a 2 lines output updates (1 misc line and the 1 line for the p
 ### Concurrent safe screen writer example
 
 ```go
-	pb := progressbar.Config{Width: 60, UseColors: true}
-	w := progressbar.ScreenWriter(os.Stdout)
+	pb := progressbar.NewBarWithWriter(os.Stdout)
+	w := pb.Writer()
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
 	go PrintStuff(w, *everyFlag)
@@ -59,7 +59,7 @@ Or without color:
 ### Automatic Reader or Writer progress bar
 
 ```go
-	reader := progressbar.NewAutoReader(resp.Body, resp.ContentLength)
+	reader := progressbar.NewAutoReader(progressbar.NewBar(), resp.Body, resp.ContentLength)
 	_, err = io.Copy(os.Stdout, reader)
 	reader.Close()
 ```
