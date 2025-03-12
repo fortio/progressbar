@@ -1,9 +1,12 @@
-// Simple zero dependency cross platform (only need ANSI compatible terminal) progress bar
+// Simple zero dependency cross platform (only need ANSI(*) compatible terminal) progress bar
 // for your golang terminal / command line interface (CLI) applications. Shows a spinner
 // and/or a progress bar with optional prefix and extra info.
 // The package provides reader/writer wrappers to automatically show progress of downloads/uploads
 // or other io operations. As well as a Writer that can be used concurrently with the progress bar
 // to show other output on screen.
+//
+// ANSI codes can be disabled completely for non terminal output or testing or as needed.
+// Color is enabled by default but can also be disabled.
 package progressbar
 
 import (
@@ -52,6 +55,9 @@ type State struct {
 	Prefix string
 	// Minimum duration between updates (0 to update every time).
 	UpdateInterval time.Duration
+	// Option to avoid all ANSI sequences (useful for non terminal output/test/go playground),
+	// Implies UseColors=false.
+	NoAnsi bool
 	// Internal last update time (used to skip updates coming before UpdateInterval has elapsed).
 	lastUpdate time.Time
 	// Writer to write to.
@@ -101,7 +107,7 @@ func (bar *State) Progress(progressPercent float64) {
 		}
 		color := Color
 		reset := Reset
-		if !bar.UseColors {
+		if !bar.UseColors || bar.NoAnsi {
 			color = "◅" // "◢"
 			reset = "▻" // "◣"
 		}
@@ -131,6 +137,7 @@ func (bar *State) Progress(progressPercent float64) {
 	_, _ = bar.out.out.Write(bar.out.buf)
 	bar.out.buf = bar.out.buf[:0]
 	bar.out.needErase = true
+	bar.out.noAnsi = bar.NoAnsi
 }
 
 // Approximate check if the progress is done (percent > 99.99).
@@ -147,12 +154,17 @@ func Spinner() {
 }
 
 // Move the cursor up n lines and clears that line.
-func MoveCursorUp(n int) {
+// If NoAnsi is configured, this just issue a new line.
+func (bar *State) MoveCursorUp(n int) {
+	if bar.NoAnsi {
+		fmt.Fprintf(bar.out.out, "\n")
+		return
+	}
 	// ANSI escape codes used:
 	// nA   = move up n lines
 	// \r   = beginning of the line
 	// (0)K = erase from current position to end of line
-	fmt.Fprintf(screenWriter, "\033[%dA\r\033[K", n)
+	fmt.Fprintf(bar.out.out, "\033[%dA\r\033[K", n)
 }
 
 type writer struct {
@@ -161,12 +173,17 @@ type writer struct {
 	buf       []byte
 	count     int
 	needErase bool
+	noAnsi    bool
 }
 
 func (w *writer) Write(buf []byte) (n int, err error) {
 	w.Lock()
 	if w.needErase {
-		_, _ = w.out.Write([]byte("\r\033[K")) // erase current progress bar line
+		if w.noAnsi {
+			_, _ = w.out.Write([]byte("\r")) // just carriage return and pray it's enough
+		} else {
+			_, _ = w.out.Write([]byte("\r\033[K")) // erase current progress bar line
+		}
 		w.needErase = false
 	}
 	n, err = w.out.Write(buf)
@@ -255,8 +272,12 @@ func (a *AutoProgress) Extra(_ *State, progressPercent float64) string {
 			HumanDuration(timeLeft))
 	default:
 		// Done, show just total, time and speed.
-		return fmt.Sprintf(" %s in %v, %s/s\033[K",
-			HumanBytes(a.current), HumanDuration(elapsed), HumanBytes(speed))
+		clearEOL := "\033[K"
+		if a.NoAnsi {
+			clearEOL = strings.Repeat(" ", 40)
+		}
+		return fmt.Sprintf(" %s in %v, %s/s%s",
+			HumanBytes(a.current), HumanDuration(elapsed), HumanBytes(speed), clearEOL)
 	}
 }
 
@@ -351,6 +372,7 @@ func NewBar() *State {
 		Extra:          nil,
 		Prefix:         "",
 		UpdateInterval: DefaultMaxUpdateInterval,
+		NoAnsi:         false,
 		out:            screenWriter,
 	}
 }
@@ -360,7 +382,7 @@ func NewBar() *State {
 // this with your existing code if the os.Stderr default global shared screen writer doesn't work for you.
 func NewBarWithWriter(w io.Writer) *State {
 	bar := NewBar()
-	bar.out = &writer{out: w, buf: make([]byte, 0, ExpectedMaxLength)}
+	bar.out = &writer{out: w, buf: make([]byte, 0, ExpectedMaxLength), noAnsi: false}
 	return bar
 }
 

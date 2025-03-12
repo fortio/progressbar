@@ -23,6 +23,7 @@ func main() {
 }
 
 func Main() int {
+	noAnsiFlag := flag.Bool("no-ansi", false, "Disable ANSI escape codes (colors and cursor movement)")
 	flag.Parse()
 	if flag.NArg() != 1 {
 		return usage()
@@ -42,6 +43,7 @@ func Main() int {
 		return 1
 	}
 	bar := progressbar.NewBarWithWriter(os.Stderr)
+	bar.NoAnsi = *noAnsiFlag
 	bar.Prefix = "URL "
 	reader := progressbar.NewAutoReader(bar, resp.Body, resp.ContentLength)
 	if resp.StatusCode != http.StatusOK {
