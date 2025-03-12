@@ -1,5 +1,9 @@
 // Simple zero dependency cross platform (only need ANSI compatible terminal) progress bar
-// for your golang terminal / command line interface (CLI) applications.
+// for your golang terminal / command line interface (CLI) applications. Shows a spinner
+// and/or a progress bar with optional prefix and extra info.
+// The package provides reader/writer wrappers to automatically show progress of downloads/uploads
+// or other io operations. As well as a Writer that can be used concurrently with the progress bar
+// to show other output on screen.
 package progressbar
 
 import (
@@ -68,7 +72,7 @@ func (bar *State) UpdatePrefix(p string) {
 // to write output without mixing with a progress bar.
 // This is thread safe / acquires a shared lock to avoid issues on the output.
 // Of note it will work best if every output to the Writer() ends with a \n.
-// The bar State must be obtained from NewBar() to setup the shared lock	.
+// The bar State must be obtained from NewBar() to setup the shared lock.
 func (bar *State) Progress(progressPercent float64) {
 	isDone := IsDone(progressPercent)
 	bar.out.Lock()
@@ -270,7 +274,9 @@ func (r *AutoProgressReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// End the progress bar (and write a newline).
+// End the progress bar: writes a newline and last update if it was skipped
+// earlier due to rate limits. This is called automatically upon Close() by
+// the Auto* wrappers.
 func (bar *State) End() {
 	bar.out.Lock()
 	// Potential unwritten/skipped last update (only if ending before 100%).
