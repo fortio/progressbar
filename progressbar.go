@@ -158,7 +158,7 @@ func Spinner() {
 	screenWriter.Unlock()
 }
 
-// Move the cursor up n lines and clears that line.
+// MoveCursorUp moves the cursor up n lines and clears that line.
 // If NoAnsi is configured, this just issue a new line.
 func (bar *State) MoveCursorUp(n int) {
 	if bar.NoAnsi {
@@ -172,7 +172,7 @@ func (bar *State) MoveCursorUp(n int) {
 	fmt.Fprintf(bar.out.out, "\033[%dA\r\033[K", n)
 }
 
-// For multibars with extra lines, write above the bar.
+// WriteAbove is for multibars with extra lines, writes (1 line) above the bar.
 func (bar *State) WriteAbove(msg string) {
 	bar.out.Lock()
 	if bar.index > 0 {
@@ -233,7 +233,8 @@ func (bar *State) Writer() io.Writer {
 	return bar.out
 }
 
-// Can be used for speed (append "/s") or raw bytes.
+// HumanBytes shows bytes in `b`, `Kb`, `Mb`, `Gb` and can also be used for speed/rate
+// (by appending "/s") in addition to raw bytes quantities.
 func HumanBytes[T int64 | float64](inp T) string {
 	n := float64(inp)
 	if n < 1024 {
@@ -311,7 +312,7 @@ func (a *AutoProgress) Extra(_ *State, progressPercent float64) string {
 	}
 }
 
-// A reader proxy associated with a progress bar.
+// AutoProgressReader is a reader proxy associated with a progress bar.
 type AutoProgressReader struct {
 	AutoProgress
 	r io.Reader
@@ -360,7 +361,7 @@ func NewAutoReader(bar *State, r io.Reader, total int64) *AutoProgressReader {
 	return res
 }
 
-// A writer proxy associated with a progress bar.
+// AutoProgressWriter is a writer proxy associated with a progress bar.
 type AutoProgressWriter struct {
 	AutoProgress
 	w io.Writer
@@ -432,7 +433,7 @@ func MultiBarEnd(bars []*State) {
 	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
 }
 
-// Creates an array of progress bars with the same settings and a prefix for each and with extraLines in between each.
+// NewMultiBar creates an array of progress bars with the same settings and a prefix for each and with extraLines in between each.
 // ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
 func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
 	res := make([]*State, len(prefix))
@@ -455,7 +456,7 @@ func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
 	return res
 }
 
-// Sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
+// MultiBar sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
 func MultiBar(extraLines int, mbars ...*State) {
 	for i, b := range mbars {
 		b.index = (1 + extraLines) * i
