@@ -26,6 +26,7 @@ const (
 	// Green FG, Grey BG.
 	Color       = "\033[32;47m"
 	Reset       = "\033[0m"
+	ClearAfter  = "\033[J"
 	DoneSpinner = "✓ "
 	// Default max refresh to avoid slowing down transfers because of progress bar updates.
 	DefaultMaxUpdateInterval = 100 * time.Millisecond
@@ -62,6 +63,8 @@ type State struct {
 	lastUpdate time.Time
 	// Writer to write to.
 	out *writer
+	// Index for multi bar (to move the cursor up/down).
+	index int
 }
 
 // UpdatePrefix changes the prefix while the progress bar is running.
@@ -127,12 +130,13 @@ func (bar *State) Progress(progressPercent float64) {
 		extra = bar.Extra(bar, progressPercent)
 	}
 	bar.out.buf = bar.out.buf[:0]
-	bar.out.buf = append(bar.out.buf, '\r')
+	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveDown()...) // does \r in single bar mode.
 	bar.out.buf = append(bar.out.buf, bar.Prefix...)
 	bar.out.buf = append(bar.out.buf, spinner...)
 	bar.out.buf = append(bar.out.buf, barStr...)
 	bar.out.buf = append(bar.out.buf, progressPercentStr...)
 	bar.out.buf = append(bar.out.buf, extra...)
+	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveUp()...)
 	// bar.out.buf = append(bar.out.buf, '\n') // Uncomment to debug/see all the incremental updates.
 	_, _ = bar.out.out.Write(bar.out.buf)
 	bar.out.buf = bar.out.buf[:0]
@@ -140,7 +144,7 @@ func (bar *State) Progress(progressPercent float64) {
 	bar.out.noAnsi = bar.NoAnsi
 }
 
-// Approximate check if the progress is done (percent > 99.99).
+// Approximate check if the progress is done (percent > 99.999).
 func IsDone(percent float64) bool {
 	return percent > 99.999
 }
@@ -165,6 +169,31 @@ func (bar *State) MoveCursorUp(n int) {
 	// \r   = beginning of the line
 	// (0)K = erase from current position to end of line
 	fmt.Fprintf(bar.out.out, "\033[%dA\r\033[K", n)
+}
+
+// For multibars with extra lines, write above the bar.
+func (bar *State) WriteAbove(msg string) {
+	bar.out.Lock()
+	if bar.index > 0 {
+		fmt.Fprintf(bar.out.out, "\r\033[%dB%s\n%s", bar.index-1, msg, bar.indexBasedMoveUp())
+	} else {
+		fmt.Fprintf(bar.out.out, "\r\033[1A%s\n", msg)
+	}
+	bar.out.Unlock()
+}
+
+func (bar *State) indexBasedMoveUp() []byte {
+	if bar.index <= 0 || bar.NoAnsi {
+		return nil
+	}
+	return []byte(fmt.Sprintf("\033[%dA", bar.index))
+}
+
+func (bar *State) indexBasedMoveDown() []byte {
+	if bar.index <= 0 || bar.NoAnsi {
+		return []byte{'\r'}
+	}
+	return []byte(fmt.Sprintf("\r\033[%dB", bar.index))
 }
 
 type writer struct {
@@ -393,3 +422,38 @@ var (
 	_ io.Reader = &AutoProgressReader{}
 	_ io.Closer = &AutoProgressReader{}
 )
+
+// --- Multi bar ---
+
+// MultiBarEnd should be called at the end to move the cursor to the line after the last multi bar.
+func MultiBarEnd(bars []*State) {
+	lastBar := bars[len(bars)-1]
+	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
+}
+
+// Creates an array of progress bars with the same settings and a prefix for each.
+// ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
+func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
+	res := make([]*State, len(prefix))
+	for i := range res {
+		res[i] = NewBarWithWriter(w)
+	}
+	// find the alignment of prefixes
+	maxLen := 0
+	for _, p := range prefix {
+		if len(p) > maxLen {
+			maxLen = len(p)
+		}
+	}
+	maxLen++ // extra space before spinner
+	// update the prefixes
+	for i, p := range prefix {
+		res[i].Prefix = p + strings.Repeat(" ", maxLen-len(p))
+		res[i].index = (1 + extraLines) * i
+	}
+	mul := (1 + extraLines)
+	// Clear from cursor/line to end of screen and make space for all the bars, then back up to the first bar.
+	_, _ = w.Write([]byte("\r" + ClearAfter + strings.Repeat("\n", len(prefix)*mul-1) + // add xxx to newline to see
+		fmt.Sprintf("\033[%dA", (len(prefix)-1)*mul)))
+	return res
+}

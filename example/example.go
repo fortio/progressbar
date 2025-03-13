@@ -51,5 +51,5 @@ func main() {
 		}
 		time.Sleep(*delayFlag)
 	}
-	fmt.Println() // When done, print a newline as the progress bar by default stays on same line.
+	pb.End() // When done, prints a newline as the progress bar otherwise updates on same line.
 }
