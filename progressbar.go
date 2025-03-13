@@ -1,5 +1,5 @@
-// Simple zero dependency cross platform (only need ANSI(*) compatible terminal) progress bar
-// for your golang terminal / command line interface (CLI) applications. Shows a spinner
+// Package progressbar is a simple zero dependency cross platform (only need ANSI(*) compatible terminal)
+// progress bar library for your golang terminal / command line interface (CLI) applications. Shows a spinner
 // and/or a progress bar with optional prefix and extra info.
 // The package provides reader/writer wrappers to automatically show progress of downloads/uploads
 // or other io operations. As well as a Writer that can be used concurrently with the progress bar
@@ -26,6 +26,7 @@ const (
 	// Green FG, Grey BG.
 	Color       = "\033[32;47m"
 	Reset       = "\033[0m"
+	ClearAfter  = "\033[J"
 	DoneSpinner = "✓ "
 	// Default max refresh to avoid slowing down transfers because of progress bar updates.
 	DefaultMaxUpdateInterval = 100 * time.Millisecond
@@ -62,6 +63,8 @@ type State struct {
 	lastUpdate time.Time
 	// Writer to write to.
 	out *writer
+	// Index for multi bar (to move the cursor up/down).
+	index int
 }
 
 // UpdatePrefix changes the prefix while the progress bar is running.
@@ -72,7 +75,7 @@ func (bar *State) UpdatePrefix(p string) {
 	bar.out.Unlock()
 }
 
-// Show a progress bar percentage (0-100%). On the same line as current line,
+// Progress shows a progress bar percentage (0-100%). On the same line as current line,
 // so when call repeatedly it will overwrite/update itself.
 // Use MoveCursorUp to move up to update other lines as needed or use Writer()
 // to write output without mixing with a progress bar.
@@ -80,7 +83,7 @@ func (bar *State) UpdatePrefix(p string) {
 // Of note it will work best if every output to the Writer() ends with a \n.
 // The bar State must be obtained from NewBar() to setup the shared lock.
 func (bar *State) Progress(progressPercent float64) {
-	isDone := IsDone(progressPercent)
+	isDone := isDone(progressPercent)
 	bar.out.Lock()
 	defer bar.out.Unlock()
 	// Skip if last write was too recent and we're not done and nothing else was written in between.
@@ -127,12 +130,13 @@ func (bar *State) Progress(progressPercent float64) {
 		extra = bar.Extra(bar, progressPercent)
 	}
 	bar.out.buf = bar.out.buf[:0]
-	bar.out.buf = append(bar.out.buf, '\r')
+	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveDown()...) // does \r in single bar mode.
 	bar.out.buf = append(bar.out.buf, bar.Prefix...)
 	bar.out.buf = append(bar.out.buf, spinner...)
 	bar.out.buf = append(bar.out.buf, barStr...)
 	bar.out.buf = append(bar.out.buf, progressPercentStr...)
 	bar.out.buf = append(bar.out.buf, extra...)
+	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveUp()...)
 	// bar.out.buf = append(bar.out.buf, '\n') // Uncomment to debug/see all the incremental updates.
 	_, _ = bar.out.out.Write(bar.out.buf)
 	bar.out.buf = bar.out.buf[:0]
@@ -140,12 +144,13 @@ func (bar *State) Progress(progressPercent float64) {
 	bar.out.noAnsi = bar.NoAnsi
 }
 
-// Approximate check if the progress is done (percent > 99.99).
-func IsDone(percent float64) bool {
+// Approximate check if the progress is done (percent > 99.999).
+func isDone(percent float64) bool {
 	return percent > 99.999
 }
 
-// Standalone spinner when the total or progress toward 100% isn't known.
+// Spinner is a standalone spinner when the total or progress toward 100% isn't known.
+// (but a progressbar with -1 total or with negative % progress does that too).
 func Spinner() {
 	screenWriter.Lock()
 	fmt.Fprintf(screenWriter, "\r%s", SpinnerChars[screenWriter.count])
@@ -153,7 +158,7 @@ func Spinner() {
 	screenWriter.Unlock()
 }
 
-// Move the cursor up n lines and clears that line.
+// MoveCursorUp moves the cursor up n lines and clears that line.
 // If NoAnsi is configured, this just issue a new line.
 func (bar *State) MoveCursorUp(n int) {
 	if bar.NoAnsi {
@@ -165,6 +170,31 @@ func (bar *State) MoveCursorUp(n int) {
 	// \r   = beginning of the line
 	// (0)K = erase from current position to end of line
 	fmt.Fprintf(bar.out.out, "\033[%dA\r\033[K", n)
+}
+
+// WriteAbove is for multibars with extra lines, writes (1 line) above the bar.
+func (bar *State) WriteAbove(msg string) {
+	bar.out.Lock()
+	if bar.index > 0 {
+		fmt.Fprintf(bar.out.out, "\r\033[%dB%s\n%s", bar.index-1, msg, bar.indexBasedMoveUp())
+	} else {
+		fmt.Fprintf(bar.out.out, "\r\033[1A%s\n", msg)
+	}
+	bar.out.Unlock()
+}
+
+func (bar *State) indexBasedMoveUp() []byte {
+	if bar.index <= 0 || bar.NoAnsi {
+		return nil
+	}
+	return []byte(fmt.Sprintf("\033[%dA", bar.index))
+}
+
+func (bar *State) indexBasedMoveDown() []byte {
+	if bar.index <= 0 || bar.NoAnsi {
+		return []byte{'\r'}
+	}
+	return []byte(fmt.Sprintf("\r\033[%dB", bar.index))
 }
 
 type writer struct {
@@ -203,7 +233,8 @@ func (bar *State) Writer() io.Writer {
 	return bar.out
 }
 
-// Can be used for speed (append "/s") or raw bytes.
+// HumanBytes shows bytes in `b`, `Kb`, `Mb`, `Gb` and can also be used for speed/rate
+// (by appending "/s") in addition to raw bytes quantities.
 func HumanBytes[T int64 | float64](inp T) string {
 	n := float64(inp)
 	if n < 1024 {
@@ -263,7 +294,7 @@ func (a *AutoProgress) Extra(_ *State, progressPercent float64) string {
 		// No total, show current, elapsed and speed.
 		return fmt.Sprintf(" %s, %v elapsed, %s/s  ",
 			HumanBytes(a.current), elapsed.Round(time.Millisecond), HumanBytes(speed))
-	case !IsDone(progressPercent):
+	case !isDone(progressPercent):
 		bytesLeft := a.total - a.current
 		timeLeft := time.Duration(float64(time.Second) * float64(bytesLeft) / speed)
 		return fmt.Sprintf(" %s out of %s, %s elapsed, %s/s, %s remaining  ",
@@ -281,7 +312,7 @@ func (a *AutoProgress) Extra(_ *State, progressPercent float64) string {
 	}
 }
 
-// A reader proxy associated with a progress bar.
+// AutoProgressReader is a reader proxy associated with a progress bar.
 type AutoProgressReader struct {
 	AutoProgress
 	r io.Reader
@@ -330,7 +361,7 @@ func NewAutoReader(bar *State, r io.Reader, total int64) *AutoProgressReader {
 	return res
 }
 
-// A writer proxy associated with a progress bar.
+// AutoProgressWriter is a writer proxy associated with a progress bar.
 type AutoProgressWriter struct {
 	AutoProgress
 	w io.Writer
@@ -393,3 +424,50 @@ var (
 	_ io.Reader = &AutoProgressReader{}
 	_ io.Closer = &AutoProgressReader{}
 )
+
+// --- Multi bar ---
+
+// MultiBarEnd should be called at the end to move the cursor to the line after the last multi bar.
+func MultiBarEnd(bars []*State) {
+	lastBar := bars[len(bars)-1]
+	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
+}
+
+// NewMultiBar creates an array of progress bars with the same settings and a prefix for each and with extraLines in between each.
+// ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
+func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
+	res := make([]*State, len(prefix))
+	for i := range res {
+		res[i] = NewBarWithWriter(w) // each their own update time/counter, not the shared one.
+	}
+	// find the alignment of prefixes
+	maxLen := 0
+	for _, p := range prefix {
+		if len(p) > maxLen {
+			maxLen = len(p)
+		}
+	}
+	maxLen++ // extra space before spinner
+	// update the prefixes
+	for i, p := range prefix {
+		res[i].Prefix = p + strings.Repeat(" ", maxLen-len(p))
+	}
+	MultiBar(extraLines, res...)
+	return res
+}
+
+// MultiBar sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
+func MultiBar(extraLines int, mbars ...*State) {
+	for i, b := range mbars {
+		b.index = (1 + extraLines) * i
+	}
+	n := len(mbars)
+	if n == 0 {
+		panic("No bars to multi-bar")
+	}
+	mul := (1 + extraLines)
+	w := mbars[0].out.out
+	// Clear from cursor/line to end of screen and make space for all the bars, then back up to the first bar.
+	_, _ = w.Write([]byte("\r" + ClearAfter + strings.Repeat("\n", n*mul-1) + // add xxx to newline to see
+		fmt.Sprintf("\033[%dA", (n-1)*mul)))
+}

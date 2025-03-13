@@ -85,7 +85,38 @@ Fetching https://go.dev/dl/go1.24.1.src.tar.gz
 ⣾ █████████████████████▌                   53.7% 15.766 Mb out of 29.352 Mb, 293ms elapsed, 53.790 Mb/s, 253ms remaining
 ```
 
-Source: [auto_example/auto_example.go](auto_example/auto_example.go)
+Source (now includes a multi bar separating R/W): [auto_example/auto_example.go](auto_example/auto_example.go)
+
+
+### Multiple Bars updating concurrently
+```go
+	mbar := progressbar.NewMultiBar(
+		os.Stdout,
+		1, // 1 extra line between bars by default.
+		"b1",
+		"longest prefix",
+		"short",
+		"b4",
+	)
+	wg := sync.WaitGroup{}
+	for i, bar := range mbar {
+		wg.Add(1)
+		// Update at random speed so bars move differently for a demo:
+		delay := time.Duration(5+rand.IntN(40)) * time.Millisecond
+		bar.WriteAbove(fmt.Sprintf("\t\t\tBar %d delay is %v", i+1, delay))
+		go func(b *progressbar.State) {
+			UpdateBar(b, delay)
+			wg.Done()
+		}(bar)
+	}
+	wg.Wait()
+	progressbar.MultiBarEnd(mbar)
+```
+
+![Multi example Screenshot](multi.png)
+
+Complete source: [multi_example/multi_example.go](multi_example/multi_example.go)
+
 
 ### Multicurl
 You can see it in use in [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli too.
