@@ -469,5 +469,4 @@ func MultiBar(extraLines int, mbars ...*State) {
 	// Clear from cursor/line to end of screen and make space for all the bars, then back up to the first bar.
 	_, _ = w.Write([]byte("\r" + ClearAfter + strings.Repeat("\n", n*mul-1) + // add xxx to newline to see
 		fmt.Sprintf("\033[%dA", (n-1)*mul)))
-
 }

@@ -25,7 +25,8 @@ func main() {
 	os.Exit(Main())
 }
 
-// AsyncCopy is a fairly overly complicated replacement for io.Copy that decouples reader and writer and optionally delays the writer.
+// AsyncCopy is a fairly overly complicated replacement for io.Copy that decouples
+// reader and writer and optionally delays the writer.
 func AsyncCopy(dst io.Writer, src io.Reader, bufSize, chanSize int, delay time.Duration) error {
 	chunks := make(chan []byte, chanSize) // Channel for chunks of data
 	errCh := make(chan error, 1)          // Channel for errors
