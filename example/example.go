@@ -33,7 +33,7 @@ func main() {
 	pb.UseColors = *colorFlag
 	pb.NoAnsi = *noAnsiFlag
 	w := pb.Writer()
-	fmt.Fprintln(w, "Progress bar example")
+	fmt.Fprintln(w, "Single progress bar example")
 	moveUpMode := *moveUpFlag
 	if moveUpMode {
 		fmt.Fprintln(w, "This line for space to demo MoveCursorUp mode")

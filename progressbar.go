@@ -1,5 +1,5 @@
-// Simple zero dependency cross platform (only need ANSI(*) compatible terminal) progress bar
-// for your golang terminal / command line interface (CLI) applications. Shows a spinner
+// Package progressbar is a simple zero dependency cross platform (only need ANSI(*) compatible terminal)
+// progress bar library for your golang terminal / command line interface (CLI) applications. Shows a spinner
 // and/or a progress bar with optional prefix and extra info.
 // The package provides reader/writer wrappers to automatically show progress of downloads/uploads
 // or other io operations. As well as a Writer that can be used concurrently with the progress bar
@@ -75,7 +75,7 @@ func (bar *State) UpdatePrefix(p string) {
 	bar.out.Unlock()
 }
 
-// Show a progress bar percentage (0-100%). On the same line as current line,
+// Progress shows a progress bar percentage (0-100%). On the same line as current line,
 // so when call repeatedly it will overwrite/update itself.
 // Use MoveCursorUp to move up to update other lines as needed or use Writer()
 // to write output without mixing with a progress bar.
@@ -83,7 +83,7 @@ func (bar *State) UpdatePrefix(p string) {
 // Of note it will work best if every output to the Writer() ends with a \n.
 // The bar State must be obtained from NewBar() to setup the shared lock.
 func (bar *State) Progress(progressPercent float64) {
-	isDone := IsDone(progressPercent)
+	isDone := isDone(progressPercent)
 	bar.out.Lock()
 	defer bar.out.Unlock()
 	// Skip if last write was too recent and we're not done and nothing else was written in between.
@@ -145,11 +145,12 @@ func (bar *State) Progress(progressPercent float64) {
 }
 
 // Approximate check if the progress is done (percent > 99.999).
-func IsDone(percent float64) bool {
+func isDone(percent float64) bool {
 	return percent > 99.999
 }
 
-// Standalone spinner when the total or progress toward 100% isn't known.
+// Spinner is a standalone spinner when the total or progress toward 100% isn't known.
+// (but a progressbar with -1 total or with negative % progress does that too).
 func Spinner() {
 	screenWriter.Lock()
 	fmt.Fprintf(screenWriter, "\r%s", SpinnerChars[screenWriter.count])
@@ -292,7 +293,7 @@ func (a *AutoProgress) Extra(_ *State, progressPercent float64) string {
 		// No total, show current, elapsed and speed.
 		return fmt.Sprintf(" %s, %v elapsed, %s/s  ",
 			HumanBytes(a.current), elapsed.Round(time.Millisecond), HumanBytes(speed))
-	case !IsDone(progressPercent):
+	case !isDone(progressPercent):
 		bytesLeft := a.total - a.current
 		timeLeft := time.Duration(float64(time.Second) * float64(bytesLeft) / speed)
 		return fmt.Sprintf(" %s out of %s, %s elapsed, %s/s, %s remaining  ",
@@ -431,12 +432,12 @@ func MultiBarEnd(bars []*State) {
 	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
 }
 
-// Creates an array of progress bars with the same settings and a prefix for each.
+// Creates an array of progress bars with the same settings and a prefix for each and with extraLines in between each.
 // ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
 func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
 	res := make([]*State, len(prefix))
 	for i := range res {
-		res[i] = NewBarWithWriter(w)
+		res[i] = NewBarWithWriter(w) // each their own update time/counter, not the shared one.
 	}
 	// find the alignment of prefixes
 	maxLen := 0
@@ -449,11 +450,24 @@ func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
 	// update the prefixes
 	for i, p := range prefix {
 		res[i].Prefix = p + strings.Repeat(" ", maxLen-len(p))
-		res[i].index = (1 + extraLines) * i
+	}
+	MultiBar(extraLines, res...)
+	return res
+}
+
+// Sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
+func MultiBar(extraLines int, mbars ...*State) {
+	for i, b := range mbars {
+		b.index = (1 + extraLines) * i
+	}
+	n := len(mbars)
+	if n == 0 {
+		panic("No bars to multi-bar")
 	}
 	mul := (1 + extraLines)
+	w := mbars[0].out.out
 	// Clear from cursor/line to end of screen and make space for all the bars, then back up to the first bar.
-	_, _ = w.Write([]byte("\r" + ClearAfter + strings.Repeat("\n", len(prefix)*mul-1) + // add xxx to newline to see
-		fmt.Sprintf("\033[%dA", (len(prefix)-1)*mul)))
-	return res
+	_, _ = w.Write([]byte("\r" + ClearAfter + strings.Repeat("\n", n*mul-1) + // add xxx to newline to see
+		fmt.Sprintf("\033[%dA", (n-1)*mul)))
+
 }

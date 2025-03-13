@@ -85,7 +85,7 @@ Fetching https://go.dev/dl/go1.24.1.src.tar.gz
 ⣾ █████████████████████▌                   53.7% 15.766 Mb out of 29.352 Mb, 293ms elapsed, 53.790 Mb/s, 253ms remaining
 ```
 
-Source: [auto_example/auto_example.go](auto_example/auto_example.go)
+Source (now includes a multi bar separating R/W): [auto_example/auto_example.go](auto_example/auto_example.go)
 
 
 ### Multiple Bars updating concurrently
