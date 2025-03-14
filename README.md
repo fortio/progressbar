@@ -95,7 +95,6 @@ Source (now includes a multi bar separating R/W): [auto_examples/auto/auto_examp
 	cfg := progressbar.DefaultConfig()
 	cfg.ExtraLines = 1
 	cfg.ScreenWriter = os.Stdout
-	cfg.UpdateInterval = 0 // Update immediately as we're simulating sleep and it's a demo.
 	mbar := cfg.NewMultiBarPrefixes(
 		"b1",
 		"longest prefix",
