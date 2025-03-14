@@ -39,7 +39,7 @@ Source: [examples/simple/simple.go](examples/simple/example.go) (`-moveup` mode)
 ### Concurrent safe screen writer example
 
 ```go
-	pb := progressbar.NewBarWithWriter(os.Stdout)
+	pb := progressbar.NewBar()
 	w := pb.Writer()
 	fmt.Fprintln(w, "Progress bar example")
 	// demonstrate concurrency safety:
