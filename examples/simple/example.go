@@ -29,9 +29,11 @@ func main() {
 	noAnsiFlag := flag.Bool("no-ansi", false, "Disable ANSI escape codes (colors and cursor movement)")
 	moveUpFlag := flag.Bool("moveup", false, "Demo in place move instead of writer")
 	flag.Parse()
-	pb := progressbar.NewBarWithWriter(os.Stdout) // For playground, defaults to stderr otherwise.
-	pb.UseColors = *colorFlag
-	pb.NoAnsi = *noAnsiFlag
+	cfg := progressbar.DefaultConfig()
+	cfg.UseColors = *colorFlag
+	cfg.NoAnsi = *noAnsiFlag
+	cfg.ScreenWriter = os.Stdout // For playground, defaults to stderr otherwise.
+	pb := cfg.NewBar()
 	w := pb.Writer()
 	fmt.Fprintln(w, "Single progress bar example")
 	moveUpMode := *moveUpFlag

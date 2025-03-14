@@ -58,7 +58,10 @@ type Config struct {
 	// Option to avoid all ANSI sequences (useful for non terminal output/test/go playground),
 	// Implies UseColors=false. Not applicable to multi bars (which need ANSI cursor moves to update each bar).
 	NoAnsi bool
-	// Underlying destination writer (default when nil will use the shared screen writer based on os.Stderr).
+	// Underlying specific destination writer for the screen/terminal.
+	// (defaults when nil will use the shared screen writer based on os.Stderr).
+	// Sets to os.Stdout or os.Stderr or any other Writer (that ends up outputting to ANSI aware terminal) to use
+	// this with your existing code if the os.Stderr default global shared screen writer doesn't work for you.
 	ScreenWriter io.Writer
 	// Extra lines between each bar for multibars.
 	ExtraLines int
@@ -92,7 +95,7 @@ func (bar *Bar) UpdatePrefix(p string) {
 // to write output without mixing with a progress bar.
 // This is thread safe / acquires a shared lock to avoid issues on the output.
 // Of note it will work best if every output to the Writer() ends with a \n.
-// The bar State must be obtained from NewBar() to setup the shared lock.
+// The bar state must be obtained from NewBar() or cfg.NewBar() to setup the shared lock.
 func (bar *Bar) Progress(progressPercent float64) {
 	isDone := isDone(progressPercent)
 	bar.out.Lock()
@@ -275,6 +278,7 @@ func HumanBytes[T int64 | float64](inp T) string {
 	return fmt.Sprintf("%.3f Gb", n)
 }
 
+// HumanDuration shows a duration rounded according to it's order of magnitude (minute/100ms/1ms resolution).
 func HumanDuration(d time.Duration) string {
 	if d <= time.Second {
 		return d.Round(time.Millisecond).String()
@@ -285,6 +289,7 @@ func HumanDuration(d time.Duration) string {
 	return d.Round(time.Minute).String()
 }
 
+// AutoProgress is base progress bar for auto reader/writers.
 type AutoProgress struct {
 	*Bar
 	total   int64
@@ -302,6 +307,7 @@ func (a *AutoProgress) Update(n int) {
 	}
 }
 
+// Extra provides the extra information on the right of the progress bar: currrent transfer amount, speed and estimated time left.
 func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 	elapsed := time.Since(a.start)
 	if a.current == 0 {
@@ -412,6 +418,8 @@ func NewAutoWriter(bar *Bar, w io.Writer, total int64) *AutoProgressWriter {
 	return res
 }
 
+// DefaultConfig returns a default configuration for the progress bar with default values:
+// DefaultWidth, color and spinner on, no extra nor prefix, a default update interval of 100ms.
 func DefaultConfig() Config {
 	return Config{
 		Width:          DefaultWidth,
@@ -425,6 +433,7 @@ func DefaultConfig() Config {
 
 // NewBar returns a new progress bar with default settings (DefaultWidth, color and spinner on, no extra nor prefix)
 // and using the shared global ScreenWriter.
+// Use cfg.NewBar() to create a new progress bar with a specific/different config.
 func NewBar() *Bar {
 	return &Bar{
 		Config: DefaultConfig(),
@@ -453,16 +462,6 @@ func (cfg Config) NewBar() *Bar {
 	}
 }
 
-// NewBarWithWriter a new progress bar with default settings but using a specific writer for the screen.
-// Pass in os.Stdout or os.Stderr or any other Writer (that ends up outputting to ANSI aware terminal) to use
-// this with your existing code if the os.Stderr default global shared screen writer doesn't work for you.
-// You can also assign this writer to a Config instance and use cfg.NewBar() to create a new progress bar with it.
-func NewBarWithWriter(w io.Writer) *Bar {
-	bar := NewBar()
-	bar.out = &writer{out: w, buf: make([]byte, 0, ExpectedMaxLength), noAnsi: false}
-	return bar
-}
-
 // Compile check time of interface implementations.
 var (
 	_ io.Writer = &AutoProgressWriter{}
@@ -486,6 +485,9 @@ func (mb *MultiBar) End() {
 	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
 }
 
+// Go over the prefixes to left align them such as all the bars are also aligned.
+// Adds 1 space to the longest prefix and updates the prefix of each bar and refreshes them.
+// (Used in multi bar during initial setup as well as when Add()ing new bars whose prefix might be longer).
 func (mb *MultiBar) PrefixesAlign() {
 	// find the alignment of prefixes
 	maxLen := 0
@@ -522,7 +524,7 @@ func (cfg Config) NewMultiBarPrefixes(prefix ...string) *MultiBar {
 		bars[i] = cfg.NewBar()
 		bars[i].Prefix = prefix[i]
 	}
-	res.Add(bars...).Init()
+	res.Add(bars...).init()
 	res.PrefixesAlign()
 	return res
 }
@@ -532,13 +534,13 @@ func (cfg Config) NewMultiBar(mbars ...*Bar) *MultiBar {
 	res := &MultiBar{
 		Config: cfg,
 	}
-	res.Add(mbars...).Init()
+	res.Add(mbars...).init()
 	return res
 }
 
-// Init makes enough space on the terminal for the number of bars and their ExtraLines.
+// init makes enough space on the terminal for the number of bars and their ExtraLines.
 // It will also clear the screen from the cursor to the end of the screen.
-func (mb *MultiBar) Init() {
+func (mb *MultiBar) init() {
 	mb.reservespace(true)
 }
 
