@@ -43,33 +43,44 @@ var (
 	SpinnerChars     = [...]string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "}
 )
 
-type State struct {
+// Config is the common configuration for the progress bar and multi bars.
+type Config struct {
 	// Width of the progress bar in characters (0 will use DefaultWidth).
 	Width int
 	// UseColors to use colors in the progress bar.
 	UseColors bool
 	// Spinner to also show a spinner in front of the progress bar.
 	Spinner bool
-	// Extra string to show after the progress bar. Keep nil for no extra.
-	Extra func(cfg *State, progressPercent float64) string
 	// Prefix to show before the progress bar (can be updated while running using UpdatePrefix() or through Extra()).
 	Prefix string
 	// Minimum duration between updates (0 to update every time).
 	UpdateInterval time.Duration
 	// Option to avoid all ANSI sequences (useful for non terminal output/test/go playground),
-	// Implies UseColors=false.
+	// Implies UseColors=false. Not applicable to multi bars (which need ANSI cursor moves to update each bar).
 	NoAnsi bool
+	// Underlying destination writer (default when nil will use the shared screen writer based on os.Stderr).
+	ScreenWriter io.Writer
+	// Extra lines between each bar for multibars.
+	ExtraLines int
+}
+
+type Bar struct {
+	Config
+	// Extra string to show after the progress bar. Keep nil for no extra.
+	Extra func(cfg *Bar, progressPercent float64) string
 	// Internal last update time (used to skip updates coming before UpdateInterval has elapsed).
 	lastUpdate time.Time
 	// Writer to write to.
 	out *writer
 	// Index for multi bar (to move the cursor up/down).
 	index int
+	// Current/last progress percentage (to refresh multi bars upon resize of prefix).
+	percent float64
 }
 
 // UpdatePrefix changes the prefix while the progress bar is running.
 // This is thread safe / acquires a shared lock to avoid issues on the output.
-func (bar *State) UpdatePrefix(p string) {
+func (bar *Bar) UpdatePrefix(p string) {
 	bar.out.Lock()
 	bar.Prefix = p
 	bar.out.Unlock()
@@ -82,10 +93,11 @@ func (bar *State) UpdatePrefix(p string) {
 // This is thread safe / acquires a shared lock to avoid issues on the output.
 // Of note it will work best if every output to the Writer() ends with a \n.
 // The bar State must be obtained from NewBar() to setup the shared lock.
-func (bar *State) Progress(progressPercent float64) {
+func (bar *Bar) Progress(progressPercent float64) {
 	isDone := isDone(progressPercent)
 	bar.out.Lock()
 	defer bar.out.Unlock()
+	bar.percent = progressPercent
 	// Skip if last write was too recent and we're not done and nothing else was written in between.
 	if bar.UpdateInterval > 0 && !isDone && bar.out.needErase {
 		now := time.Now()
@@ -144,6 +156,13 @@ func (bar *State) Progress(progressPercent float64) {
 	bar.out.noAnsi = bar.NoAnsi
 }
 
+// Redraw force the redraw the progress bar with last known percentage.
+func (bar *Bar) Redraw() {
+	var zero time.Time
+	bar.lastUpdate = zero
+	bar.Progress(bar.percent)
+}
+
 // Approximate check if the progress is done (percent > 99.999).
 func isDone(percent float64) bool {
 	return percent > 99.999
@@ -160,7 +179,7 @@ func Spinner() {
 
 // MoveCursorUp moves the cursor up n lines and clears that line.
 // If NoAnsi is configured, this just issue a new line.
-func (bar *State) MoveCursorUp(n int) {
+func (bar *Bar) MoveCursorUp(n int) {
 	if bar.NoAnsi {
 		fmt.Fprintf(bar.out.out, "\n")
 		return
@@ -173,7 +192,7 @@ func (bar *State) MoveCursorUp(n int) {
 }
 
 // WriteAbove is for multibars with extra lines, writes (1 line) above the bar.
-func (bar *State) WriteAbove(msg string) {
+func (bar *Bar) WriteAbove(msg string) {
 	bar.out.Lock()
 	if bar.index > 0 {
 		fmt.Fprintf(bar.out.out, "\r\033[%dB%s\n%s", bar.index-1, msg, bar.indexBasedMoveUp())
@@ -183,14 +202,14 @@ func (bar *State) WriteAbove(msg string) {
 	bar.out.Unlock()
 }
 
-func (bar *State) indexBasedMoveUp() []byte {
+func (bar *Bar) indexBasedMoveUp() []byte {
 	if bar.index <= 0 || bar.NoAnsi {
 		return nil
 	}
 	return []byte(fmt.Sprintf("\033[%dA", bar.index))
 }
 
-func (bar *State) indexBasedMoveDown() []byte {
+func (bar *Bar) indexBasedMoveDown() []byte {
 	if bar.index <= 0 || bar.NoAnsi {
 		return []byte{'\r'}
 	}
@@ -229,7 +248,7 @@ var screenWriter = &writer{out: os.Stderr, buf: make([]byte, 0, ExpectedMaxLengt
 // Writer returns the io.Writer that can be safely used concurrently with associated with the progress bar.
 // Any writes will clear the current line/progress bar and write the new content, and
 // then rewrite the progress bar at the next update.
-func (bar *State) Writer() io.Writer {
+func (bar *Bar) Writer() io.Writer {
 	return bar.out
 }
 
@@ -267,7 +286,7 @@ func HumanDuration(d time.Duration) string {
 }
 
 type AutoProgress struct {
-	*State
+	*Bar
 	total   int64
 	current int64
 	start   time.Time
@@ -283,7 +302,7 @@ func (a *AutoProgress) Update(n int) {
 	}
 }
 
-func (a *AutoProgress) Extra(_ *State, progressPercent float64) string {
+func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 	elapsed := time.Since(a.start)
 	if a.current == 0 {
 		return fmt.Sprintf(" %d/%d", a.current, a.total)
@@ -329,7 +348,7 @@ func (r *AutoProgressReader) Read(p []byte) (n int, err error) {
 // End the progress bar: writes a newline and last update if it was skipped
 // earlier due to rate limits. This is called automatically upon Close() by
 // the Auto* wrappers.
-func (bar *State) End() {
+func (bar *Bar) End() {
 	bar.out.Lock()
 	// Potential unwritten/skipped last update (only if ending before 100%).
 	if len(bar.out.buf) > 0 {
@@ -351,10 +370,10 @@ func (r *AutoProgressReader) Close() error {
 
 // NewAutoReader returns a new io.Reader that will update the progress bar as it reads from the underlying reader
 // up to the expected total (pass a negative total for just spinner updates for unknown end/total).
-func NewAutoReader(bar *State, r io.Reader, total int64) *AutoProgressReader {
+func NewAutoReader(bar *Bar, r io.Reader, total int64) *AutoProgressReader {
 	res := &AutoProgressReader{}
-	res.State = bar
-	res.State.Extra = res.Extra
+	res.Bar = bar
+	res.Bar.Extra = res.Extra
 	res.r = r
 	res.total = total
 	res.Update(0)
@@ -383,35 +402,62 @@ func (w *AutoProgressWriter) Close() error {
 
 // NewAutoWriter returns a new io.Writer that will update the progress bar as it writes from the underlying writer
 // up to the expected total (pass a negative total for just spinner updates for unknown end/total).
-func NewAutoWriter(bar *State, w io.Writer, total int64) *AutoProgressWriter {
+func NewAutoWriter(bar *Bar, w io.Writer, total int64) *AutoProgressWriter {
 	res := &AutoProgressWriter{}
-	res.State = bar
-	res.State.Extra = res.Extra
+	res.Bar = bar
+	res.Bar.Extra = res.Extra
 	res.w = w
 	res.total = total
 	res.Update(0)
 	return res
 }
 
-// NewBar returns a new progress bar with default settings (DefaultWidth, color and spinner on, no extra nor prefix)
-// and using the shared global ScreenWriter.
-func NewBar() *State {
-	return &State{
+func DefaultConfig() Config {
+	return Config{
 		Width:          DefaultWidth,
 		UseColors:      true,
 		Spinner:        true,
-		Extra:          nil,
 		Prefix:         "",
 		UpdateInterval: DefaultMaxUpdateInterval,
 		NoAnsi:         false,
-		out:            screenWriter,
+	}
+}
+
+// NewBar returns a new progress bar with default settings (DefaultWidth, color and spinner on, no extra nor prefix)
+// and using the shared global ScreenWriter.
+func NewBar() *Bar {
+	return &Bar{
+		Config: DefaultConfig(),
+		Extra:  nil,
+		out:    screenWriter,
+	}
+}
+
+// Create a new progress bar from the config.
+func (cfg Config) NewBar() *Bar {
+	// Default to DefaultWidth if 0.
+	if cfg.Width <= 0 {
+		cfg.Width = DefaultWidth
+	}
+	var out *writer
+	// Default to share screenwriter if nil.
+	if cfg.ScreenWriter == nil {
+		out = screenWriter
+	} else {
+		out = &writer{out: cfg.ScreenWriter, buf: make([]byte, 0, ExpectedMaxLength), noAnsi: cfg.NoAnsi}
+	}
+	return &Bar{
+		Config: cfg,
+		Extra:  nil,
+		out:    out,
 	}
 }
 
 // NewBarWithWriter a new progress bar with default settings but using a specific writer for the screen.
 // Pass in os.Stdout or os.Stderr or any other Writer (that ends up outputting to ANSI aware terminal) to use
 // this with your existing code if the os.Stderr default global shared screen writer doesn't work for you.
-func NewBarWithWriter(w io.Writer) *State {
+// You can also assign this writer to a Config instance and use cfg.NewBar() to create a new progress bar with it.
+func NewBarWithWriter(w io.Writer) *Bar {
 	bar := NewBar()
 	bar.out = &writer{out: w, buf: make([]byte, 0, ExpectedMaxLength), noAnsi: false}
 	return bar
@@ -427,47 +473,111 @@ var (
 
 // --- Multi bar ---
 
-// MultiBarEnd should be called at the end to move the cursor to the line after the last multi bar.
-func MultiBarEnd(bars []*State) {
-	lastBar := bars[len(bars)-1]
+type MultiBar struct {
+	// Common config used to create the bars.
+	Config
+	// The progress bars that are part of this multi bar set.
+	Bars []*Bar
+}
+
+// End should be called at the end to move the cursor to the line after the last multi bar.
+func (mb *MultiBar) End() {
+	lastBar := mb.Bars[len(mb.Bars)-1]
 	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
 }
 
-// NewMultiBar creates an array of progress bars with the same settings and a prefix for each and with extraLines in between each.
-// ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
-func NewMultiBar(w io.Writer, extraLines int, prefix ...string) []*State {
-	res := make([]*State, len(prefix))
-	for i := range res {
-		res[i] = NewBarWithWriter(w) // each their own update time/counter, not the shared one.
-	}
+func (mb *MultiBar) PrefixesAlign() {
 	// find the alignment of prefixes
 	maxLen := 0
-	for _, p := range prefix {
+	for _, b := range mb.Bars {
+		// find the longest prefix before current padding:
+		p := strings.TrimSpace(b.Prefix)
 		if len(p) > maxLen {
 			maxLen = len(p)
 		}
 	}
 	maxLen++ // extra space before spinner
 	// update the prefixes
-	for i, p := range prefix {
-		res[i].Prefix = p + strings.Repeat(" ", maxLen-len(p))
+	for _, b := range mb.Bars {
+		b.out.Lock()
+		s := strings.TrimSpace(b.Prefix)
+		b.Prefix = s + strings.Repeat(" ", maxLen-len(s))
+		b.out.Unlock()
+		b.Redraw()
 	}
-	MultiBar(extraLines, res...)
+}
+
+// NewMultiBarPrefixes creates an array of progress bars with the same settings and
+// a prefix for each and with cfg.ExtraLines in between each.
+// ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
+func (cfg Config) NewMultiBarPrefixes(prefix ...string) *MultiBar {
+	res := &MultiBar{
+		Config: cfg,
+	}
+	if cfg.ScreenWriter == nil {
+		cfg.ScreenWriter = os.Stderr // to not get the shared screenwriter, with each their own update time/counter.
+	}
+	bars := make([]*Bar, len(prefix))
+	for i := range prefix {
+		bars[i] = cfg.NewBar()
+		bars[i].Prefix = prefix[i]
+	}
+	res.Add(bars...).Init()
+	res.PrefixesAlign()
 	return res
 }
 
-// MultiBar sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
-func MultiBar(extraLines int, mbars ...*State) {
-	for i, b := range mbars {
-		b.index = (1 + extraLines) * i
+// Init sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
+func (cfg Config) NewMultiBar(mbars ...*Bar) *MultiBar {
+	res := &MultiBar{
+		Config: cfg,
 	}
-	n := len(mbars)
+	res.Add(mbars...).Init()
+	return res
+}
+
+// Init makes enough space on the terminal for the number of bars and their ExtraLines.
+// It will also clear the screen from the cursor to the end of the screen.
+func (mb *MultiBar) Init() {
+	mb.reservespace(true)
+}
+
+func (mb *MultiBar) reservespace(initial bool) {
+	clearAfter := ClearAfter
+	n := len(mb.Bars)
 	if n == 0 {
-		panic("No bars to multi-bar")
+		panic("No bars to multi-bar init")
 	}
-	mul := (1 + extraLines)
-	w := mbars[0].out.out
+	if !initial {
+		clearAfter = "" // no screen clear after initial setup.
+		// Initially we setup including the extra lines above the (first) bar, when doing later updates / adding more bars,
+		// the cursor is on that first bar (so extralines below).
+		if mb.ExtraLines > 0 {
+			clearAfter = fmt.Sprintf("\033[%dA", mb.ExtraLines)
+		}
+	}
+	mul := (1 + mb.ExtraLines)
+	mb.Bars[0].out.Lock()
 	// Clear from cursor/line to end of screen and make space for all the bars, then back up to the first bar.
-	_, _ = w.Write([]byte("\r" + ClearAfter + strings.Repeat("\n", n*mul-1) + // add xxx to newline to see
+	_, _ = mb.ScreenWriter.Write([]byte("\r" + clearAfter + strings.Repeat("\n", n*mul-1) + // add xxx to newline to see
 		fmt.Sprintf("\033[%dA", (n-1)*mul)))
+	mb.Bars[0].out.Unlock()
+}
+
+// Add adds 1 or more progress bars to an existing multibar.
+// Add should be called before the added bars are started/updated.
+// It will reserve space for the new bars and move the cursor up/down as needed
+// for a bar that was already created with NewMultiBar() or NewMultiBarPrefixes().
+func (mb *MultiBar) Add(mbars ...*Bar) *MultiBar {
+	prev := len(mb.Bars)
+	mb.Bars = append(mb.Bars, mbars...)
+	for i := prev; i < len(mb.Bars); i++ {
+		mb.Bars[i].out.Lock()
+		mb.Bars[i].index = (1 + mb.ExtraLines) * i
+		mb.Bars[i].out.Unlock()
+	}
+	if prev > 0 {
+		mb.reservespace(false)
+	}
+	return mb
 }

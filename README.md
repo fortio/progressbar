@@ -15,6 +15,8 @@ or other io operations. As well as a Writer that can be used concurrently with t
 
 ## Examples
 
+See [examples/](examples/)
+
 ### Manually updating a progress bar and additional output
 
 Manually handling a 2 lines output updates (1 misc line and the 1 line for the progress bar)
@@ -32,7 +34,7 @@ Manually handling a 2 lines output updates (1 misc line and the 1 line for the p
 	}
 ```
 
-Source: [example/example.go](example/example.go) (`-moveup` mode)
+Source: [examples/simple/simple.go](examples/simple/example.go) (`-moveup` mode)
 
 ### Concurrent safe screen writer example
 
@@ -51,7 +53,7 @@ Source: [example/example.go](example/example.go) (`-moveup` mode)
 ```
 
 ```sh
-go run fortio.org/progressbar/example@latest -color
+go run fortio.org/progressbar/examples/simple@latest -color
 ```
 
 Produces
@@ -63,7 +65,7 @@ Or without color:
 ◅███████████████████████████▊            ▻ 69.4%
 ```
 
-Source: [example/example.go](example/example.go) (default mode)
+Source: [examples/simple/example.go](examples/simple/example.go) (default mode)
 
 ### Automatic Reader or Writer progress bar
 
@@ -75,24 +77,26 @@ Source: [example/example.go](example/example.go) (default mode)
 
 See it in action with a progress bar while downloading a URL:
 ```sh
-go run fortio.org/progressbar/auto_example@latest https://go.dev/ > go_dev.html
+go run fortio.org/progressbar/examples/auto@latest https://go.dev/ > go_dev.html
 ```
 
 Will show a progress bar for instance
 ```
-$  go run ./auto_example https://go.dev/dl/go1.24.1.src.tar.gz > /dev/null
+$  go run ./examples/auto https://go.dev/dl/go1.24.1.src.tar.gz > /dev/null
 Fetching https://go.dev/dl/go1.24.1.src.tar.gz
 ⣾ █████████████████████▌                   53.7% 15.766 Mb out of 29.352 Mb, 293ms elapsed, 53.790 Mb/s, 253ms remaining
 ```
 
-Source (now includes a multi bar separating R/W): [auto_example/auto_example.go](auto_example/auto_example.go)
+Source (now includes a multi bar separating R/W): [auto_examples/auto/auto_example.go](auto_examples/auto/auto_example.go)
 
 
 ### Multiple Bars updating concurrently
 ```go
-	mbar := progressbar.NewMultiBar(
-		os.Stdout,
-		1, // 1 extra line between bars by default.
+	cfg := progressbar.DefaultConfig()
+	cfg.ExtraLines = 1
+	cfg.ScreenWriter = os.Stdout
+	cfg.UpdateInterval = 0 // Update immediately as we're simulating sleep and it's a demo.
+	mbar := cfg.NewMultiBarPrefixes(
 		"b1",
 		"longest prefix",
 		"short",
@@ -117,6 +121,7 @@ Source (now includes a multi bar separating R/W): [auto_example/auto_example.go]
 
 Complete source: [multi_example/multi_example.go](multi_example/multi_example.go)
 
+Which includes adding extra bars dynamically.
 
 ### Multicurl
 You can see it in use in [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli too.
