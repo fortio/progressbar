@@ -442,7 +442,7 @@ func NewBar() *Bar {
 	}
 }
 
-// Create a new progress bar from the config.
+// NewBar creates a new progress bar from the config.
 func (cfg Config) NewBar() *Bar {
 	// Default to DefaultWidth if 0.
 	if cfg.Width <= 0 {
@@ -485,7 +485,7 @@ func (mb *MultiBar) End() {
 	fmt.Fprintf(lastBar.out.out, "%s\n", lastBar.indexBasedMoveDown())
 }
 
-// Go over the prefixes to left align them such as all the bars are also aligned.
+// PrefixesAlign iterates over the prefixes to left align them such as all the bars are also aligned.
 // Adds 1 space to the longest prefix and updates the prefix of each bar and refreshes them.
 // (Used in multi bar during initial setup as well as when Add()ing new bars whose prefix might be longer).
 func (mb *MultiBar) PrefixesAlign() {
@@ -512,24 +512,25 @@ func (mb *MultiBar) PrefixesAlign() {
 // NewMultiBarPrefixes creates an array of progress bars with the same settings and
 // a prefix for each and with cfg.ExtraLines in between each.
 // ANSI must be supported by the terminal as this relies on moving the cursor up/down for each bar.
-func (cfg Config) NewMultiBarPrefixes(prefix ...string) *MultiBar {
+func (cfg Config) NewMultiBarPrefixes(prefixes ...string) *MultiBar {
 	res := &MultiBar{
 		Config: cfg,
 	}
 	if cfg.ScreenWriter == nil {
 		cfg.ScreenWriter = os.Stderr // to not get the shared screenwriter, with each their own update time/counter.
 	}
-	bars := make([]*Bar, len(prefix))
-	for i := range prefix {
+	bars := make([]*Bar, len(prefixes))
+	for i := range prefixes {
 		bars[i] = cfg.NewBar()
-		bars[i].Prefix = prefix[i]
+		bars[i].Prefix = prefixes[i]
 	}
 	res.Add(bars...).init()
 	res.PrefixesAlign()
 	return res
 }
 
-// Init sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
+// NewMultiBar sets up a multibar from already created progress bars (for instance AutoProgressReader/Writers).
+// It will reserve space for the new bars and move the cursor up/down as needed as well as align the prefixes of each bar.
 func (cfg Config) NewMultiBar(mbars ...*Bar) *MultiBar {
 	res := &MultiBar{
 		Config: cfg,
