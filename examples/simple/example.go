@@ -10,7 +10,7 @@ import (
 	"fortio.org/progressbar"
 )
 
-func PrintStuff(pb *progressbar.State, w io.Writer, every time.Duration) {
+func PrintStuff(pb *progressbar.Bar, w io.Writer, every time.Duration) {
 	ticker := time.NewTicker(every)
 	i := 0
 	for {

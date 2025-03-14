@@ -46,18 +46,19 @@ func Main() int {
 		fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", url, err)
 		return 1
 	}
-	rBar := progressbar.NewBarWithWriter(os.Stderr)
-	rBar.NoAnsi = *noAnsiFlag
-	rBar.Prefix = "R "
+	cfg := progressbar.DefaultConfig()
+	cfg.NoAnsi = *noAnsiFlag
+	cfg.Prefix = "R "
+	cfg.ScreenWriter = os.Stderr
+	rBar := cfg.NewBar()
 	// On purpose different buffer size than the writer to show the effect of different speeds.
 	bufSize := 10 * 1024 * 1024 // 10MB
 	reader := progressbar.NewAutoReader(rBar, resp.Body, resp.ContentLength)
 	defer reader.Close()
-	wBar := progressbar.NewBarWithWriter(os.Stderr)
-	wBar.NoAnsi = *noAnsiFlag
-	wBar.Prefix = "W "
+	cfg.Prefix = "W "
+	wBar := cfg.NewBar()
 	writer := progressbar.NewAutoWriter(wBar, bufio.NewWriterSize(os.Stdout, 16*1024), resp.ContentLength)
-	progressbar.MultiBar(0, rBar, wBar)
+	cfg.NewMultiBar(rBar, wBar)
 	if resp.StatusCode != http.StatusOK {
 		fmt.Fprintf(os.Stderr, "Error fetching %s: %s\n", url, resp.Status)
 		return 1

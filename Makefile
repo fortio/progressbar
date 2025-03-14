@@ -5,19 +5,19 @@ DEMO_URL ?= https://go.dev/dl/go1.24.1.src.tar.gz
 demo: demo_multi demo_simple demo_moveup demo_auto demo_no_ansi
 
 demo_simple:
-	go run ./example -color
+	go run -race ./examples/simple -color
 
 demo_moveup:
-	go run ./example -moveup # no color but ansi codes.
+	go run -race ./examples/simple -moveup # no color but ansi codes.
 
 demo_auto:
-	go run ./auto_example $(DEMO_URL) | wc -c
+	go run -race ./examples/auto $(DEMO_URL) | wc -c
 
 demo_no_ansi:
-	go run ./auto_example -no-ansi $(DEMO_URL)  | wc -c
+	go run -race ./examples/auto -no-ansi $(DEMO_URL)  | wc -c
 
 demo_multi:
-	go run ./multi_example
+	go run -race ./examples/multi
 
 lint: .golangci.yml
 	golangci-lint run
