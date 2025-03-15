@@ -24,10 +24,15 @@ const (
 	Space        = " "
 	Full         = "█"
 	// Green FG, Grey BG.
-	Color       = "\033[32;47m"
-	Reset       = "\033[0m"
-	ClearAfter  = "\033[J"
-	DoneSpinner = "✓ "
+	GreenBar     = "\033[32;100m"
+	RedBar       = "\033[91;100m"
+	YellowBar    = "\033[93;100m"
+	BlueBar      = "\033[34;100m"
+	WhiteBar     = "\033[97;100m"
+	DefaultColor = GreenBar
+	Reset        = "\033[0m"
+	ClearAfter   = "\033[J"
+	DoneSpinner  = "✓ "
 	// Default max refresh to avoid slowing down transfers because of progress bar updates.
 	DefaultMaxUpdateInterval = 100 * time.Millisecond
 	// Expected max length of a progress bar line (prefix + spinner + bar + percentage + extra).
@@ -47,8 +52,10 @@ var (
 type Config struct {
 	// Width of the progress bar in characters (0 will use DefaultWidth).
 	Width int
-	// UseColors to use colors in the progress bar.
+	// UseColors to use colors in the progress bar (default is true).
 	UseColors bool
+	// Which color to use for the bar (default is green) if UseColors is true.
+	Color string
 	// Spinner to also show a spinner in front of the progress bar.
 	Spinner bool
 	// Prefix to show before the progress bar (can be updated while running using UpdatePrefix() or through Extra()).
@@ -123,7 +130,7 @@ func (bar *Bar) Progress(progressPercent float64) {
 		if remainder == 0 {
 			spaceCount++
 		}
-		color := Color
+		color := bar.Color
 		reset := Reset
 		if !bar.UseColors || bar.NoAnsi {
 			color = "◅" // "◢"
@@ -424,6 +431,7 @@ func DefaultConfig() Config {
 	return Config{
 		Width:          DefaultWidth,
 		UseColors:      true,
+		Color:          DefaultColor, // GreenBar
 		Spinner:        true,
 		Prefix:         "",
 		UpdateInterval: DefaultMaxUpdateInterval,
