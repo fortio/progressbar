@@ -11,7 +11,7 @@ and ANSI codes can be disabled too if needed) golang concurrent safe progress ba
 Shows a spinner and/or a progress bar with optional prefix and extra info.
 
 Also provides reader/writer wrappers to automatically show progress of downloads/uploads
-or other io operations. As well as a Writer that can be used concurrently with the progress bar to show other output on screen.
+or other io operations, as well as a Writer that can be used concurrently with the progress bar to show other output on screen.
 
 ## Examples
 
@@ -19,7 +19,8 @@ See [examples/](examples/)
 
 ### Manually updating a progress bar and additional output
 
-Manually handling a 2 lines output updates (1 misc line and the 1 line for the progress bar)
+Manually handling a 2-line output updates (1 misc line and the 1 line for the progress bar):
+
 ```go
 	pb := progressbar.NewBar()
 	fmt.Print("Progress bar example\n\n") // 1 empty line before the progress bar, for the demo
