@@ -35,6 +35,7 @@ func main() {
 		"b4",
 	)
 	wg := sync.WaitGroup{}
+	colors := []string{progressbar.RedBar, progressbar.GreenBar, progressbar.YellowBar, progressbar.BlueBar, progressbar.WhiteBar}
 	for i, bar := range mbar.Bars {
 		wg.Add(1)
 		// Update at random speed so bars move differently:
@@ -42,6 +43,7 @@ func main() {
 		if *extraLinesFlag > 0 {
 			bar.WriteAbove(fmt.Sprintf("\t\t\tBar %d delay is %v", i+1, delay))
 		}
+		bar.Color = colors[i%len(colors)]
 		go func(b *progressbar.Bar) {
 			UpdateBar(b, delay)
 			wg.Done()
@@ -50,6 +52,7 @@ func main() {
 	// Add an extra bar later example:
 	time.Sleep(3 * time.Second)
 	cfg.Prefix = "A wild bar appears"
+	cfg.Color = colors[len(mbar.Bars)%len(colors)]
 	extraBar := cfg.NewBar()
 	mbar.Add(extraBar)
 	mbar.PrefixesAlign()
