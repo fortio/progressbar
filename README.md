@@ -19,7 +19,7 @@ See [examples/](examples/)
 
 ### Manually updating a progress bar and additional output
 
-Manually handling a 2-line output updates (1 misc line and the 1 line for the progress bar):
+Manually handling a 2-line output update (1 misc line and the 1 line for the progress bar):
 
 ```go
 	pb := progressbar.NewBar()
