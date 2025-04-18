@@ -133,3 +133,7 @@ If you have more advanced needs for TUI including raw mode input or readline, yo
 [github.com/fortio/terminal](https://github.com/fortio/terminal#terminal)
 
 And still use this for a progress bar part.
+
+It is used for instance in [github.com/fortio/fps's web mode progress update](https://github.com/fortio/fps#web-serving-fire-mode)
+
+And [grol](https://github.com/grol-io/grol#grol)'s multi file processing progress info (`make grol-tests`)

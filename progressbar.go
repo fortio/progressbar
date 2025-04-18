@@ -60,6 +60,10 @@ type Config struct {
 	Spinner bool
 	// Prefix to show before the progress bar (can be updated while running using UpdatePrefix() or through Extra()).
 	Prefix string
+	// Suffix to show after the percentage information on the bar (can be updated while running using UpdateSuffix()).
+	Suffix string
+	// If NoPercent is true, the percentage is not shown on the bar (if the default %.1f%% format is not adequate).
+	NoPercent bool
 	// Minimum duration between updates (0 to update every time).
 	UpdateInterval time.Duration
 	// Option to avoid all ANSI sequences (useful for non terminal output/test/go playground),
@@ -96,6 +100,14 @@ func (bar *Bar) UpdatePrefix(p string) {
 	bar.out.Unlock()
 }
 
+// UpdateSuffix changes the suffix while the progress bar is running.
+// This is thread safe / acquires a shared lock to avoid issues on the output.
+func (bar *Bar) UpdateSuffix(s string) {
+	bar.out.Lock()
+	bar.Suffix = s
+	bar.out.Unlock()
+}
+
 // Progress shows a progress bar percentage (0-100%). On the same line as current line,
 // so when call repeatedly it will overwrite/update itself.
 // Use MoveCursorUp to move up to update other lines as needed or use Writer()
@@ -118,7 +130,7 @@ func (bar *Bar) Progress(progressPercent float64) {
 	}
 	barStr := ""
 	progressPercentStr := ""
-	if progressPercent >= 0 && progressPercent <= 100 {
+	if progressPercent >= 0 && progressPercent <= 100 { //nolint:nestif // it's not that bad here
 		width := float64(bar.Width)
 		if width == 0 {
 			width = DefaultWidth
@@ -137,7 +149,9 @@ func (bar *Bar) Progress(progressPercent float64) {
 			reset = "▻" // "◣"
 		}
 		barStr = color + strings.Repeat(Full, fullCount) + FractionalBlocks[remainder] + strings.Repeat(Space, spaceCount) + reset
-		progressPercentStr = fmt.Sprintf(" %.1f%%", progressPercent)
+		if !bar.NoPercent {
+			progressPercentStr = fmt.Sprintf(" %.1f%%", progressPercent)
+		}
 	}
 	spinner := ""
 	if bar.Spinner {
@@ -157,6 +171,7 @@ func (bar *Bar) Progress(progressPercent float64) {
 	bar.out.buf = append(bar.out.buf, spinner...)
 	bar.out.buf = append(bar.out.buf, barStr...)
 	bar.out.buf = append(bar.out.buf, progressPercentStr...)
+	bar.out.buf = append(bar.out.buf, bar.Suffix...)
 	bar.out.buf = append(bar.out.buf, extra...)
 	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveUp()...)
 	// bar.out.buf = append(bar.out.buf, '\n') // Uncomment to debug/see all the incremental updates.
