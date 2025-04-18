@@ -28,10 +28,13 @@ func main() {
 	everyFlag := flag.Duration("every", 1*time.Second, "Print extra stuff every")
 	noAnsiFlag := flag.Bool("no-ansi", false, "Disable ANSI escape codes (colors and cursor movement)")
 	moveUpFlag := flag.Bool("moveup", false, "Demo in place move instead of writer")
+	noPercent := flag.Bool("no-percent", false, "Disable percent display")
+	noSuffix := flag.Bool("no-suffix", false, "Disable suffix display")
 	flag.Parse()
 	cfg := progressbar.DefaultConfig()
 	cfg.UseColors = *colorFlag
 	cfg.NoAnsi = *noAnsiFlag
+	cfg.NoPercent = *noPercent
 	cfg.ScreenWriter = os.Stdout // For playground, defaults to stderr otherwise.
 	pb := cfg.NewBar()
 	w := pb.Writer()
@@ -46,6 +49,9 @@ func main() {
 	// exact number of 'pixels', just to demo every smooth step:
 	n := pb.Width * 8
 	for i := 0; i <= n; i++ {
+		if !*noSuffix {
+			pb.UpdateSuffix(fmt.Sprintf(" %d/%d", i, n))
+		}
 		pb.Progress(100. * float64(i) / float64(n))
 		if moveUpMode && i%63 == 0 {
 			pb.MoveCursorUp(1)
