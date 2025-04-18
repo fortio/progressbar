@@ -130,7 +130,7 @@ func (bar *Bar) Progress(progressPercent float64) {
 	}
 	barStr := ""
 	progressPercentStr := ""
-	if progressPercent >= 0 && progressPercent <= 100 {
+	if progressPercent >= 0 && progressPercent <= 100 { //nolint:nestif // it's not that bad here
 		width := float64(bar.Width)
 		if width == 0 {
 			width = DefaultWidth
