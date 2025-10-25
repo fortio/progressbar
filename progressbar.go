@@ -118,9 +118,13 @@ func (bar *Bar) UpdateSuffix(s string) {
 // Of note it will work best if every output to the Writer() ends with a \n.
 // The bar state must be obtained from NewBar() or cfg.NewBar() to setup the shared lock.
 func (bar *Bar) Progress(progressPercent float64) {
-	isDone := isDone(progressPercent)
 	bar.out.Lock()
-	defer bar.out.Unlock()
+	bar.progressLocked(progressPercent)
+	bar.out.Unlock()
+}
+
+func (bar *Bar) progressLocked(progressPercent float64) {
+	isDone := isDone(progressPercent)
 	bar.percent = progressPercent
 	// Skip if last write was too recent and we're not done and nothing else was written in between.
 	if bar.UpdateInterval > 0 && !isDone && bar.out.needErase {
@@ -339,11 +343,9 @@ func (a *AutoProgress) Update(n int) {
 	a.current += int64(n)
 	if a.current > 0 || a.total > 0 {
 		p := float64(a.current) * 100. / float64(a.total)
-		a.out.Unlock()
-		a.Progress(p)
-	} else {
-		a.out.Unlock()
+		a.progressLocked(p)
 	}
+	a.out.Unlock()
 }
 
 // Extra provides the extra information on the right of the progress bar: currrent transfer amount, speed and estimated time left.
