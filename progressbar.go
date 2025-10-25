@@ -342,8 +342,7 @@ func (a *AutoProgress) Update(n int) {
 	}
 	a.current += int64(n)
 	if a.current > 0 || a.total > 0 {
-		p := float64(a.current) * 100. / float64(a.total)
-		a.progressLocked(p)
+		a.progressLocked(float64(a.current) * 100. / float64(a.total))
 	}
 	a.out.Unlock()
 }
