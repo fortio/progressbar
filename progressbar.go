@@ -24,6 +24,7 @@ const (
 	Space        = " "
 	Full         = "█"
 	// Green FG, Grey BG.
+
 	GreenBar     = "\033[32;100m"
 	RedBar       = "\033[91;100m"
 	YellowBar    = "\033[93;100m"
@@ -33,9 +34,9 @@ const (
 	Reset        = "\033[0m"
 	ClearAfter   = "\033[J"
 	DoneSpinner  = "✓ "
-	// Default max refresh to avoid slowing down transfers because of progress bar updates.
+	// DefaultMaxUpdateInterval is the default max refresh to avoid slowing down transfers because of progress bar updates.
 	DefaultMaxUpdateInterval = 100 * time.Millisecond
-	// Expected max length of a progress bar line (prefix + spinner + bar + percentage + extra).
+	// ExpectedMaxLength is the expected max length of a progress bar line (prefix + spinner + bar + percentage + extra).
 	// used for initial buffer size, will resize if needed but should be avoided. Note it includes
 	// non printable ANSI sequences and utf8 encoded characters so it's the same as the onscreen width.
 	ExpectedMaxLength = 256
@@ -44,6 +45,7 @@ const (
 var (
 	// 1/8th of a full block to 7/8ths of a full block (ie fractional part of a block to
 	// get 8x resolution per character).
+
 	FractionalBlocks = [...]string{"", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
 	SpinnerChars     = [...]string{"⣾ ", "⣷ ", "⣯ ", "⣟ ", "⡿ ", "⢿ ", "⣻ ", "⣽ "}
 )
@@ -262,7 +264,7 @@ func (w *writer) Write(buf []byte) (n int, err error) {
 	}
 	n, err = w.out.Write(buf)
 	w.Unlock()
-	return
+	return n, err
 }
 
 // Global write with lock and reused buffer.
@@ -319,13 +321,28 @@ type AutoProgress struct {
 	start   time.Time
 }
 
+// NewAutoProgress returns a new AutoProgress associated with
+// the given bar and total size. [AutoProgress.Update] can be called
+// from multiple goroutines to increment the progress by <n>.
+func NewAutoProgress(bar *Bar, total int64) *AutoProgress {
+	res := &AutoProgress{}
+	res.Bar = bar
+	res.total = total
+	return res
+}
+
 func (a *AutoProgress) Update(n int) {
+	a.out.Lock()
 	if a.current == 0 {
 		a.start = time.Now()
 	}
 	a.current += int64(n)
 	if a.current > 0 || a.total > 0 {
-		a.Progress(float64(a.current) * 100. / float64(a.total))
+		p := float64(a.current) * 100. / float64(a.total)
+		a.out.Unlock()
+		a.Progress(p)
+	} else {
+		a.out.Unlock()
 	}
 }
 
@@ -370,7 +387,7 @@ func (r *AutoProgressReader) Read(p []byte) (n int, err error) {
 	if n > 0 {
 		r.Update(n)
 	}
-	return
+	return n, err
 }
 
 // End the progress bar: writes a newline and last update if it was skipped
@@ -417,7 +434,7 @@ type AutoProgressWriter struct {
 func (w *AutoProgressWriter) Write(p []byte) (n int, err error) {
 	n, err = w.w.Write(p)
 	w.Update(n)
-	return
+	return n, err
 }
 
 func (w *AutoProgressWriter) Close() error {
