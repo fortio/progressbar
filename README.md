@@ -123,8 +123,11 @@ Complete source: [multi_example/multi_example.go](multi_example/multi_example.go
 
 Which includes adding extra bars dynamically.
 
-### Multicurl
-You can see it in use in [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli too.
+### Used in
+
+You can see it in use in
+- [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli (multiple bars).
+- [fortio/tsync](https://github.com/fortio/tsync#tsync) TUI: progress bars of the file transfers rendered inside its files box (see below).
 
 ### Embedding progress bars in a TUI (or any other output)
 
@@ -136,7 +139,6 @@ line := bar.Render(percent)                 // prefix, spinner, bar, percentage,
 b := progressbar.BarString(20, percent, progressbar.BlueBar) // the 1/8th resolution bar, 20 characters wide
 stats := progressbar.RateETA(current, total, elapsed)         // "1.000 Mb out of 4.000 Mb, 2s elapsed, 512 Kb/s, 6s remaining"
 ```
-See it in use in [fortio/tsync](https://github.com/fortio/tsync)'s files transfer box.
 
 ## See also
 
