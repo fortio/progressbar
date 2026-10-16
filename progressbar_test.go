@@ -60,17 +60,18 @@ func TestAutoProgressExtra(t *testing.T) {
 		t.Errorf("unexpected start extra %q", got)
 	}
 	a.current = 1 << 20
-	inProgress := regexp.MustCompile(`^ 1\.000 Mb out of 4\.000 Mb, 2s elapsed, 51[12].* Kb/s, 6s remaining  $`)
+	inProgress := regexp.MustCompile(`^ 1\.000 Mb out of 4\.000 Mb, 2(\.\d+)?s elapsed, 51[12].* Kb/s, 6(\.\d+)?s remaining  $`)
 	if got := a.Extra(nil, 25); !inProgress.MatchString(got) {
 		t.Errorf("unexpected in progress extra %q", got)
 	}
 	a.current = 4 << 20
-	if got := a.Extra(nil, 100); got != " 4.000 Mb in 2s, 2.000 Mb/s\x1b[K" {
+	// Exact formatting is checked in TestRateETA, real elapsed time varies a bit (eg on windows).
+	if got := a.Extra(nil, 100); !regexp.MustCompile(`^ 4\.000 Mb in 2(\.\d+)?s, (1\.9\d\d|2\.000) Mb/s\x1b\[K$`).MatchString(got) {
 		t.Errorf("unexpected done extra %q", got)
 	}
 	a.total = -1
 	a.current = 1 << 20
-	if got := a.Extra(nil, -1); !regexp.MustCompile(`^ 1\.000 Mb, 2s elapsed, 51[12].* Kb/s  $`).MatchString(got) {
+	if got := a.Extra(nil, -1); !regexp.MustCompile(`^ 1\.000 Mb, 2(\.\d+)?s elapsed, 51[12].* Kb/s  $`).MatchString(got) {
 		t.Errorf("unexpected unknown total extra %q", got)
 	}
 }
