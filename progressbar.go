@@ -134,27 +134,66 @@ func (bar *Bar) progressLocked(progressPercent float64) {
 		}
 		bar.lastUpdate = now
 	}
+	bar.out.buf = bar.out.buf[:0]
+	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveDown()...) // does \r in single bar mode.
+	bar.out.buf = bar.appendRenderLocked(bar.out.buf, progressPercent)
+	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveUp()...)
+	// bar.out.buf = append(bar.out.buf, '\n') // Uncomment to debug/see all the incremental updates.
+	_, _ = bar.out.out.Write(bar.out.buf)
+	bar.out.buf = bar.out.buf[:0]
+	bar.out.needErase = true
+	bar.out.noAnsi = bar.NoAnsi
+}
+
+// BarString returns just the bar part of a progress bar for the given percentage (0-100),
+// width characters wide, with 1/8th of a character resolution, with the color (eg [GreenBar])
+// prefix and a [Reset] at the end, or if color is empty, with ◅ and ▻ delimiters instead
+// (so 2 more characters wide). Returns an empty string for percentages outside 0-100.
+// Useful to embed progress bars in other output (eg a TUI) instead of using [Bar.Progress].
+func BarString(width int, percent float64, color string) string {
+	if percent < 0 || percent > 100 {
+		return ""
+	}
+	count := int(8*float64(width)*percent/100. + 0.5)
+	fullCount := count / 8
+	remainder := count % 8
+	spaceCount := width - fullCount - 1
+	if remainder == 0 {
+		spaceCount++
+	}
+	reset := Reset
+	if color == "" {
+		color = "◅" // "◢"
+		reset = "▻" // "◣"
+	}
+	return color + strings.Repeat(Full, fullCount) + FractionalBlocks[remainder] + strings.Repeat(Space, spaceCount) + reset
+}
+
+// Render returns the progress bar line for the given percentage, same as what [Bar.Progress]
+// shows (prefix, spinner, bar, percentage, suffix, extra) but without any cursor movement
+// or output. Useful to embed progress bars in other output (eg a TUI redrawing its screen
+// periodically), including multiple ones. Each call advances the spinner.
+// This is thread safe / acquires the shared output lock.
+func (bar *Bar) Render(progressPercent float64) string {
+	bar.out.Lock()
+	defer bar.out.Unlock()
+	bar.percent = progressPercent
+	return string(bar.appendRenderLocked(nil, progressPercent))
+}
+
+func (bar *Bar) appendRenderLocked(buf []byte, progressPercent float64) []byte {
 	barStr := ""
 	progressPercentStr := ""
-	if progressPercent >= 0 && progressPercent <= 100 { //nolint:nestif // it's not that bad here
-		width := float64(bar.Width)
+	if progressPercent >= 0 && progressPercent <= 100 {
+		width := bar.Width
 		if width == 0 {
 			width = DefaultWidth
 		}
-		count := int(8*width*progressPercent/100. + 0.5)
-		fullCount := count / 8
-		remainder := count % 8
-		spaceCount := int(width) - fullCount - 1
-		if remainder == 0 {
-			spaceCount++
-		}
 		color := bar.Color
-		reset := Reset
 		if !bar.UseColors || bar.NoAnsi {
-			color = "◅" // "◢"
-			reset = "▻" // "◣"
+			color = ""
 		}
-		barStr = color + strings.Repeat(Full, fullCount) + FractionalBlocks[remainder] + strings.Repeat(Space, spaceCount) + reset
+		barStr = BarString(width, progressPercent, color)
 		if !bar.NoPercent {
 			progressPercentStr = fmt.Sprintf(" %.1f%%", progressPercent)
 		}
@@ -163,7 +202,7 @@ func (bar *Bar) progressLocked(progressPercent float64) {
 	if bar.Spinner {
 		spinner = SpinnerChars[bar.out.count]
 		bar.out.count = (bar.out.count + 1) % len(SpinnerChars)
-		if isDone {
+		if isDone(progressPercent) {
 			spinner = DoneSpinner
 		}
 	}
@@ -171,20 +210,13 @@ func (bar *Bar) progressLocked(progressPercent float64) {
 	if bar.Extra != nil {
 		extra = bar.Extra(bar, progressPercent)
 	}
-	bar.out.buf = bar.out.buf[:0]
-	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveDown()...) // does \r in single bar mode.
-	bar.out.buf = append(bar.out.buf, bar.Prefix...)
-	bar.out.buf = append(bar.out.buf, spinner...)
-	bar.out.buf = append(bar.out.buf, barStr...)
-	bar.out.buf = append(bar.out.buf, progressPercentStr...)
-	bar.out.buf = append(bar.out.buf, bar.Suffix...)
-	bar.out.buf = append(bar.out.buf, extra...)
-	bar.out.buf = append(bar.out.buf, bar.indexBasedMoveUp()...)
-	// bar.out.buf = append(bar.out.buf, '\n') // Uncomment to debug/see all the incremental updates.
-	_, _ = bar.out.out.Write(bar.out.buf)
-	bar.out.buf = bar.out.buf[:0]
-	bar.out.needErase = true
-	bar.out.noAnsi = bar.NoAnsi
+	buf = append(buf, bar.Prefix...)
+	buf = append(buf, spinner...)
+	buf = append(buf, barStr...)
+	buf = append(buf, progressPercentStr...)
+	buf = append(buf, bar.Suffix...)
+	buf = append(buf, extra...)
+	return buf
 }
 
 // Redraw force the redraw the progress bar with last known percentage.
@@ -353,27 +385,45 @@ func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 	if a.current == 0 {
 		return fmt.Sprintf(" %d/%d", a.current, a.total)
 	}
-	speed := float64(a.current) / elapsed.Seconds()
+	stats := RateETA(a.current, a.total, elapsed)
+	if a.total <= 0 || !isDone(progressPercent) {
+		return " " + stats + "  " // extra spaces in case the previous line was longer.
+	}
+	clearEOL := "\033[K"
+	if a.NoAnsi {
+		clearEOL = strings.Repeat(" ", 40)
+	}
+	return " " + stats + clearEOL
+}
+
+// RateETA returns the human readable transfer statistics for current bytes out of total
+// (<= 0 if unknown) after elapsed time, same as the auto progress bars show:
+//   - in progress: "1.000 Mb out of 4.000 Mb, 2s elapsed, 512 Kb/s, 6s remaining"
+//   - done (current >= total): "4.000 Mb in 2s, 2.000 Mb/s"
+//   - unknown total: "1.000 Mb, 2s elapsed, 512 Kb/s"
+//
+// Returns just "current/total" if nothing was transferred yet (or no time elapsed).
+// Useful for progress information without a [Bar] (eg with [BarString] in a TUI).
+func RateETA(current, total int64, elapsed time.Duration) string {
+	if current <= 0 || elapsed <= 0 {
+		return fmt.Sprintf("%d/%d", current, total)
+	}
+	speed := float64(current) / elapsed.Seconds()
 	switch {
-	case a.total <= 0:
+	case total <= 0:
 		// No total, show current, elapsed and speed.
-		return fmt.Sprintf(" %s, %v elapsed, %s/s  ",
-			HumanBytes(a.current), elapsed.Round(time.Millisecond), HumanBytes(speed))
-	case !isDone(progressPercent):
-		bytesLeft := a.total - a.current
+		return fmt.Sprintf("%s, %v elapsed, %s/s",
+			HumanBytes(current), elapsed.Round(time.Millisecond), HumanBytes(speed))
+	case current < total:
+		bytesLeft := total - current
 		timeLeft := time.Duration(float64(time.Second) * float64(bytesLeft) / speed)
-		return fmt.Sprintf(" %s out of %s, %s elapsed, %s/s, %s remaining  ",
-			HumanBytes(a.current), HumanBytes(a.total),
+		return fmt.Sprintf("%s out of %s, %s elapsed, %s/s, %s remaining",
+			HumanBytes(current), HumanBytes(total),
 			HumanDuration(elapsed), HumanBytes(speed),
 			HumanDuration(timeLeft))
 	default:
 		// Done, show just total, time and speed.
-		clearEOL := "\033[K"
-		if a.NoAnsi {
-			clearEOL = strings.Repeat(" ", 40)
-		}
-		return fmt.Sprintf(" %s in %v, %s/s%s",
-			HumanBytes(a.current), HumanDuration(elapsed), HumanBytes(speed), clearEOL)
+		return fmt.Sprintf("%s in %v, %s/s", HumanBytes(current), HumanDuration(elapsed), HumanBytes(speed))
 	}
 }
 
