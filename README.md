@@ -126,6 +126,18 @@ Which includes adding extra bars dynamically.
 ### Multicurl
 You can see it in use in [fortio/multicurl](https://github.com/fortio/multicurl?tab=readme-ov-file#multicurl) cli too.
 
+### Embedding progress bars in a TUI (or any other output)
+
+`Progress()` writes directly to the terminal at the current cursor position. When you redraw the screen yourself (eg a TUI using [fortio.org/terminal/ansipixels](https://github.com/fortio/terminal#terminal)), you can instead get the rendered strings and draw them wherever you want, as many as needed:
+```go
+bar := progressbar.DefaultConfig().NewBar() // or cfg.NewBar() with your Width, Color, Prefix...
+line := bar.Render(percent)                 // prefix, spinner, bar, percentage, suffix, extra (no cursor moves)
+// Or just the pieces:
+b := progressbar.BarString(20, percent, progressbar.BlueBar) // the 1/8th resolution bar, 20 characters wide
+stats := progressbar.RateETA(current, total, elapsed)         // "1.000 Mb out of 4.000 Mb, 2s elapsed, 512 Kb/s, 6s remaining"
+```
+See it in use in [fortio/tsync](https://github.com/fortio/tsync)'s files transfer box.
+
 ## See also
 
 If you have more advanced needs for TUI including raw mode input or readline, you can also see/use/have a look at
