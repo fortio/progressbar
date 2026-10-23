@@ -123,6 +123,10 @@ Complete source: [multi_example/multi_example.go](multi_example/multi_example.go
 
 Which includes adding extra bars dynamically.
 
+### Line width
+
+The bar line is kept within `Config.MaxWidth` columns (default 80, 0 for no limit, or set your terminal's width) so it doesn't wrap, which would break the cursor based refresh. To fit, the bar shrinks (down to `MinBarWidth`), then the auto bars' stats get shorter ("out of total", then elapsed time, are dropped), and as a last resort a custom `Extra` text is truncated.
+
 ### Used in
 
 You can see it in use in
@@ -138,6 +142,7 @@ line := bar.Render(percent)                 // prefix, spinner, bar, percentage,
 // Or just the pieces:
 b := progressbar.BarString(20, percent, progressbar.BlueBar) // the 1/8th resolution bar, 20 characters wide
 stats := progressbar.RateETA(current, total, elapsed)         // "1.000 Mb out of 4.000 Mb, 2s elapsed, 512 Kb/s, 6s remaining"
+stats = progressbar.RateETAFit(current, total, elapsed, 30)  // same but more compact if longer than 30 characters (eg bar.ExtraWidth() in your Extra func)
 ```
 
 ## See also

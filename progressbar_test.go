@@ -3,6 +3,7 @@ package progressbar
 import (
 	"bytes"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -136,5 +137,73 @@ func TestRateETA(t *testing.T) {
 		if got := RateETA(tc.current, tc.total, tc.elapsed); got != tc.out {
 			t.Errorf("RateETA(%d, %d, %v) = %q, expected %q", tc.current, tc.total, tc.elapsed, got, tc.out)
 		}
+	}
+}
+
+func TestMaxWidth(t *testing.T) {
+	bar := NewBar()
+	bar.NoAnsi = true
+	bar.MaxWidth = 60
+	bar.Extra = func(*Bar, float64) string { return " 1 Kb out of 2 Kb, 1ms elapsed, 1 Mb/s, 1ms remaining\033[K" }
+	got := bar.Render(50)
+	if n := visibleLen(got); n != 59 {
+		t.Errorf("expected 59 visible chars, got %d: %q", n, got)
+	}
+	bar.MaxWidth = 0
+	if n := visibleLen(bar.Render(50)); n <= 60 {
+		t.Errorf("expected no truncation, got %d", n)
+	}
+}
+
+func TestMaxWidthFit(t *testing.T) {
+	for _, maxW := range []int{60, 80, 100} {
+		var buf bytes.Buffer
+		cfg := DefaultConfig()
+		cfg.MaxWidth = maxW
+		cfg.NoAnsi = true
+		cfg.Prefix = " 1 "
+		cfg.ScreenWriter = &buf
+		bar := cfg.NewBar()
+		a := NewAutoProgress(bar, 129536)
+		a.current = 97280
+		a.start = time.Now().Add(-114 * time.Millisecond)
+		bar.Extra = a.Extra
+		for _, pct := range []float64{0.4, 75.9, 100} {
+			got := bar.Render(pct)
+			if n := visibleLen(got); n > maxW-1 {
+				t.Errorf("max %d pct %v: %d visible chars: %q", maxW, pct, n, got)
+			}
+		}
+	}
+}
+
+func TestRateETAFitAndExtraWidth(t *testing.T) {
+	const cur, total, el = 1 << 20, 4 << 20, 2 * time.Second
+	full := RateETA(cur, total, el)
+	if got := RateETAFit(cur, total, el, len(full)); got != full {
+		t.Errorf("expected full %q, got %q", full, got)
+	}
+	noTotal := RateETAFit(cur, total, el, len(full)-1)
+	if strings.Contains(noTotal, "out of") || !strings.Contains(noTotal, "elapsed") {
+		t.Errorf("expected only \"out of\" dropped, got %q", noTotal)
+	}
+	compact := RateETAFit(cur, total, el, len(noTotal)-1)
+	if strings.Contains(compact, "elapsed") || !strings.Contains(compact, "remaining") {
+		t.Errorf("expected elapsed dropped, got %q", compact)
+	}
+	var buf bytes.Buffer
+	cfg := DefaultConfig()
+	cfg.ScreenWriter = &buf
+	bar := cfg.NewBar()
+	avail := 0
+	bar.Extra = func(b *Bar, _ float64) string { avail = b.ExtraWidth(); return "" }
+	bar.Render(50)
+	if avail <= 0 || avail >= DefaultMaxWidth {
+		t.Errorf("unexpected extra width %d", avail)
+	}
+	bar.MaxWidth = 0
+	bar.Render(50)
+	if avail != -1 {
+		t.Errorf("expected -1 when unlimited, got %d", avail)
 	}
 }

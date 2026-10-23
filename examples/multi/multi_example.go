@@ -12,7 +12,7 @@ import (
 )
 
 func UpdateBar(b *progressbar.Bar, delay time.Duration) {
-	for i := 0; i <= 300; i++ {
+	for i := range 301 {
 		b.Progress(float64(i) / 3.)
 		time.Sleep(delay)
 	}
