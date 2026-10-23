@@ -138,3 +138,40 @@ func TestRateETA(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxWidth(t *testing.T) {
+	bar := NewBar()
+	bar.NoAnsi = true
+	bar.MaxWidth = 60
+	bar.Extra = func(*Bar, float64) string { return " 1 Kb out of 2 Kb, 1ms elapsed, 1 Mb/s, 1ms remaining\033[K" }
+	got := bar.Render(50)
+	if n := visibleLen(got); n != 59 {
+		t.Errorf("expected 59 visible chars, got %d: %q", n, got)
+	}
+	bar.MaxWidth = 0
+	if n := visibleLen(bar.Render(50)); n <= 60 {
+		t.Errorf("expected no truncation, got %d", n)
+	}
+}
+
+func TestMaxWidthFit(t *testing.T) {
+	for _, maxW := range []int{60, 80, 100} {
+		var buf bytes.Buffer
+		cfg := DefaultConfig()
+		cfg.MaxWidth = maxW
+		cfg.NoAnsi = true
+		cfg.Prefix = " 1 "
+		cfg.ScreenWriter = &buf
+		bar := cfg.NewBar()
+		a := NewAutoProgress(bar, 129536)
+		a.current = 97280
+		a.start = time.Now().Add(-114 * time.Millisecond)
+		bar.Extra = a.Extra
+		for _, pct := range []float64{0.4, 75.9, 100} {
+			got := bar.Render(pct)
+			if n := visibleLen(got); n > maxW-1 {
+				t.Errorf("max %d pct %v: %d visible chars: %q", maxW, pct, n, got)
+			}
+		}
+	}
+}

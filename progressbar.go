@@ -21,8 +21,14 @@ import (
 
 const (
 	DefaultWidth = 40
-	Space        = " "
-	Full         = "█"
+	// DefaultMaxWidth is the default maximum width of the whole progress bar line (see [Config.MaxWidth]).
+	DefaultMaxWidth = 80
+	// MinBarWidth is the narrowest the bar will get when shrinking to fit [Config.MaxWidth].
+	MinBarWidth = 20
+	// minExtraWidth is the room we try to leave for the extra text (compact stats) when shrinking the bar.
+	minExtraWidth = 38
+	Space         = " "
+	Full          = "█"
 	// Green FG, Grey BG.
 
 	GreenBar     = "\033[32;100m"
@@ -78,6 +84,13 @@ type Config struct {
 	ScreenWriter io.Writer
 	// Extra lines between each bar for multibars.
 	ExtraLines int
+	// MaxWidth is the maximum visible width of the whole line (prefix, spinner, bar, percentage, suffix and extra)
+	// to avoid the line wrapping on narrow terminals (which breaks the cursor based refresh).
+	// The bar gets narrower (down to MinBarWidth) and the extra text more compact (and truncated as a last resort)
+	// to fit. Defaults to DefaultMaxWidth (80), use 0 for no limit or the actual terminal width if known.
+	// Width is counted in characters (runes, ignoring ANSI sequences) so wide or combining characters in custom
+	// text are not accounted for: adjust MaxWidth accordingly in that case.
+	MaxWidth int
 }
 
 type Bar struct {
@@ -92,6 +105,8 @@ type Bar struct {
 	index int
 	// Current/last progress percentage (to refresh multi bars upon resize of prefix).
 	percent float64
+	// Visible width available to the Extra function for the current render (<0 for unlimited).
+	extraAvail int
 }
 
 // UpdatePrefix changes the prefix while the progress bar is running.
@@ -181,23 +196,25 @@ func (bar *Bar) Render(progressPercent float64) string {
 	return string(bar.appendRenderLocked(nil, progressPercent))
 }
 
-func (bar *Bar) appendRenderLocked(buf []byte, progressPercent float64) []byte {
-	barStr := ""
-	progressPercentStr := ""
-	if progressPercent >= 0 && progressPercent <= 100 {
-		width := bar.Width
-		if width == 0 {
-			width = DefaultWidth
-		}
-		color := bar.Color
-		if !bar.UseColors || bar.NoAnsi {
-			color = ""
-		}
-		barStr = BarString(width, progressPercent, color)
-		if !bar.NoPercent {
-			progressPercentStr = fmt.Sprintf(" %.1f%%", progressPercent)
-		}
+// fitWidth returns the width to use for the bar, shrunk if needed to fit in room (<0 for unlimited),
+// the columns left for the bar and the extra text once the prefix, spinner, percentage and suffix are accounted for.
+func (bar *Bar) fitWidth(room int) int {
+	width := bar.Width
+	if width == 0 {
+		width = DefaultWidth
 	}
+	if room < 0 {
+		return width
+	}
+	// 2 for the delimiters when not using colors. Only reserve room for extra text if there is some.
+	reserve := 2
+	if bar.Extra != nil {
+		reserve += minExtraWidth
+	}
+	return min(width, max(room-reserve, MinBarWidth))
+}
+
+func (bar *Bar) appendRenderLocked(buf []byte, progressPercent float64) []byte {
 	spinner := ""
 	if bar.Spinner {
 		spinner = SpinnerChars[bar.out.count]
@@ -206,9 +223,34 @@ func (bar *Bar) appendRenderLocked(buf []byte, progressPercent float64) []byte {
 			spinner = DoneSpinner
 		}
 	}
+	progressPercentStr := ""
+	if progressPercent >= 0 && progressPercent <= 100 && !bar.NoPercent {
+		progressPercentStr = fmt.Sprintf(" %.1f%%", progressPercent)
+	}
+	// Visible width of everything but the bar and the extra. Keep the last column unused so we never wrap.
+	room := -1
+	if bar.MaxWidth > 0 {
+		room = bar.MaxWidth - 1 - visibleLen(bar.Prefix) - visibleLen(spinner) -
+			max(len(progressPercentStr), len(" 100.0%")) - visibleLen(bar.Suffix)
+	}
+	barStr := ""
+	if progressPercent >= 0 && progressPercent <= 100 {
+		color := bar.Color
+		if !bar.UseColors || bar.NoAnsi {
+			color = ""
+		}
+		barStr = BarString(bar.fitWidth(room), progressPercent, color)
+	}
+	bar.extraAvail = -1
+	if room >= 0 {
+		bar.extraAvail = max(room-visibleLen(barStr)+len(" 100.0%")-len(progressPercentStr), 0)
+	}
 	extra := ""
 	if bar.Extra != nil {
 		extra = bar.Extra(bar, progressPercent)
+		if bar.extraAvail >= 0 {
+			extra = truncateVisible(extra, bar.extraAvail)
+		}
 	}
 	buf = append(buf, bar.Prefix...)
 	buf = append(buf, spinner...)
@@ -217,6 +259,51 @@ func (bar *Bar) appendRenderLocked(buf []byte, progressPercent float64) []byte {
 	buf = append(buf, bar.Suffix...)
 	buf = append(buf, extra...)
 	return buf
+}
+
+// visibleLen returns the number of visible characters in s, ignoring ANSI CSI sequences.
+func visibleLen(s string) int {
+	n := 0
+	inEsc := false
+	for _, r := range s {
+		switch {
+		case inEsc:
+			if r >= '@' && r <= '~' && r != '[' {
+				inEsc = false
+			}
+		case r == '\033':
+			inEsc = true
+		default:
+			n++
+		}
+	}
+	return n
+}
+
+// truncateVisible cuts s to at most maxV visible characters, keeping any ANSI sequences (so colors/erase still apply).
+func truncateVisible(s string, maxV int) string {
+	if maxV < 0 {
+		maxV = 0
+	}
+	var sb strings.Builder
+	n := 0
+	inEsc := false
+	for _, r := range s {
+		switch {
+		case inEsc:
+			sb.WriteRune(r)
+			if r >= '@' && r <= '~' && r != '[' {
+				inEsc = false
+			}
+		case r == '\033':
+			inEsc = true
+			sb.WriteRune(r)
+		case n < maxV:
+			sb.WriteRune(r)
+			n++
+		}
+	}
+	return sb.String()
 }
 
 // Redraw force the redraw the progress bar with last known percentage.
@@ -385,7 +472,7 @@ func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 	if a.current == 0 {
 		return fmt.Sprintf(" %d/%d", a.current, a.total)
 	}
-	stats := RateETA(a.current, a.total, elapsed)
+	stats := rateETAFit(a.current, a.total, elapsed, a.extraAvail-1) // -1 for the leading space.
 	if a.total <= 0 || !isDone(progressPercent) {
 		return " " + stats + "  " // extra spaces in case the previous line was longer.
 	}
@@ -405,6 +492,12 @@ func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 // Returns just "current/total" if nothing was transferred yet (or no time elapsed).
 // Useful for progress information without a [Bar] (eg with [BarString] in a TUI).
 func RateETA(current, total int64, elapsed time.Duration) string {
+	return rateETAFit(current, total, elapsed, -1)
+}
+
+// rateETAFit is [RateETA] but drops details ("out of total", then elapsed time) when the full version
+// is longer than maxLen (<0 for no limit). The result can still be longer than maxLen, caller truncates.
+func rateETAFit(current, total int64, elapsed time.Duration, maxLen int) string {
 	if current <= 0 || elapsed <= 0 {
 		return fmt.Sprintf("%d/%d", current, total)
 	}
@@ -417,10 +510,17 @@ func RateETA(current, total int64, elapsed time.Duration) string {
 	case current < total:
 		bytesLeft := total - current
 		timeLeft := time.Duration(float64(time.Second) * float64(bytesLeft) / speed)
-		return fmt.Sprintf("%s out of %s, %s elapsed, %s/s, %s remaining",
-			HumanBytes(current), HumanBytes(total),
-			HumanDuration(elapsed), HumanBytes(speed),
-			HumanDuration(timeLeft))
+		cur, tot, el, sp, left := HumanBytes(current), HumanBytes(total), HumanDuration(elapsed),
+			HumanBytes(speed), HumanDuration(timeLeft)
+		res := fmt.Sprintf("%s out of %s, %s elapsed, %s/s, %s remaining", cur, tot, el, sp, left)
+		if maxLen < 0 || len(res) <= maxLen {
+			return res
+		}
+		res = fmt.Sprintf("%s, %s elapsed, %s/s, %s remaining", cur, el, sp, left)
+		if len(res) <= maxLen {
+			return res
+		}
+		return fmt.Sprintf("%s, %s/s, %s remaining", cur, sp, left)
 	default:
 		// Done, show just total, time and speed.
 		return fmt.Sprintf("%s in %v, %s/s", HumanBytes(current), HumanDuration(elapsed), HumanBytes(speed))
@@ -513,6 +613,7 @@ func NewAutoWriter(bar *Bar, w io.Writer, total int64) *AutoProgressWriter {
 func DefaultConfig() Config {
 	return Config{
 		Width:          DefaultWidth,
+		MaxWidth:       DefaultMaxWidth,
 		UseColors:      true,
 		Color:          DefaultColor, // GreenBar
 		Spinner:        true,
