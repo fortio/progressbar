@@ -142,6 +142,7 @@ line := bar.Render(percent)                 // prefix, spinner, bar, percentage,
 // Or just the pieces:
 b := progressbar.BarString(20, percent, progressbar.BlueBar) // the 1/8th resolution bar, 20 characters wide
 stats := progressbar.RateETA(current, total, elapsed)         // "1.000 Mb out of 4.000 Mb, 2s elapsed, 512 Kb/s, 6s remaining"
+stats = progressbar.RateETAFit(current, total, elapsed, 30)  // same but more compact if longer than 30 characters (eg bar.ExtraWidth() in your Extra func)
 ```
 
 ## See also

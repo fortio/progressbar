@@ -214,6 +214,13 @@ func (bar *Bar) fitWidth(room int) int {
 	return min(width, max(room-reserve, MinBarWidth))
 }
 
+// ExtraWidth returns the number of columns available to the [Bar.Extra] function for the render in progress,
+// (given [Config.MaxWidth] and the other parts of the line), or -1 if unlimited. Anything longer gets truncated.
+// Only meaningful when called from the Extra function (eg to pass to [RateETAFit] or to shorten your own text).
+func (bar *Bar) ExtraWidth() int {
+	return bar.extraAvail
+}
+
 func (bar *Bar) appendRenderLocked(buf []byte, progressPercent float64) []byte {
 	spinner := ""
 	if bar.Spinner {
@@ -472,7 +479,7 @@ func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 	if a.current == 0 {
 		return fmt.Sprintf(" %d/%d", a.current, a.total)
 	}
-	stats := rateETAFit(a.current, a.total, elapsed, a.extraAvail-1) // -1 for the leading space.
+	stats := RateETAFit(a.current, a.total, elapsed, a.extraAvail-1) // -1 for the leading space.
 	if a.total <= 0 || !isDone(progressPercent) {
 		return " " + stats + "  " // extra spaces in case the previous line was longer.
 	}
@@ -492,12 +499,13 @@ func (a *AutoProgress) Extra(_ *Bar, progressPercent float64) string {
 // Returns just "current/total" if nothing was transferred yet (or no time elapsed).
 // Useful for progress information without a [Bar] (eg with [BarString] in a TUI).
 func RateETA(current, total int64, elapsed time.Duration) string {
-	return rateETAFit(current, total, elapsed, -1)
+	return RateETAFit(current, total, elapsed, -1)
 }
 
-// rateETAFit is [RateETA] but drops details ("out of total", then elapsed time) when the full version
-// is longer than maxLen (<0 for no limit). The result can still be longer than maxLen, caller truncates.
-func rateETAFit(current, total int64, elapsed time.Duration, maxLen int) string {
+// RateETAFit is [RateETA] but drops details ("out of total", then elapsed time) when the full version
+// is longer than maxLen characters (<0 for no limit). The result can still be longer than maxLen
+// (eg "1.000 Mb, 512 Kb/s, 6s remaining" is the most compact form), the caller truncates if needed.
+func RateETAFit(current, total int64, elapsed time.Duration, maxLen int) string {
 	if current <= 0 || elapsed <= 0 {
 		return fmt.Sprintf("%d/%d", current, total)
 	}
